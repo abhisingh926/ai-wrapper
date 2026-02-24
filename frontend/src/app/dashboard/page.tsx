@@ -60,10 +60,11 @@ export default function DashboardHome() {
         }
     };
 
+    const isAdmin = stats.plan === "admin";
     const statCards = [
-        { label: "Active Agents", value: `${stats.totalAgents} / ${stats.agentLimit}`, icon: "🤖", color: "from-indigo-500/20 to-indigo-600/20", border: "border-indigo-500/10" },
-        { label: "Messages Used", value: `${stats.messagesUsed} / ${stats.messageLimit}`, icon: "💬", color: "from-cyan-500/20 to-cyan-600/20", border: "border-cyan-500/10" },
-        { label: "Current Plan", value: stats.plan.charAt(0).toUpperCase() + stats.plan.slice(1), icon: "💎", color: "from-emerald-500/20 to-emerald-600/20", border: "border-emerald-500/10" },
+        { label: "Active Agents", value: isAdmin ? `${stats.totalAgents} / ∞` : `${stats.totalAgents} / ${stats.agentLimit}`, icon: "🤖", color: "from-indigo-500/20 to-indigo-600/20", border: "border-indigo-500/10" },
+        { label: "Messages Used", value: isAdmin ? `${stats.messagesUsed} / ∞` : `${stats.messagesUsed} / ${stats.messageLimit}`, icon: "💬", color: "from-cyan-500/20 to-cyan-600/20", border: "border-cyan-500/10" },
+        { label: "Current Plan", value: isAdmin ? "Admin" : stats.plan.charAt(0).toUpperCase() + stats.plan.slice(1), icon: isAdmin ? "👑" : "💎", color: isAdmin ? "from-purple-500/20 to-purple-600/20" : "from-emerald-500/20 to-emerald-600/20", border: isAdmin ? "border-purple-500/10" : "border-emerald-500/10" },
         { label: "Total Errors", value: stats.totalErrors, icon: "⚠️", color: "from-amber-500/20 to-amber-600/20", border: "border-amber-500/10" },
     ];
 

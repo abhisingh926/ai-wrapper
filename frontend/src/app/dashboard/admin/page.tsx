@@ -10,7 +10,7 @@ const AI_PROVIDERS = [
 ];
 
 export default function AdminPage() {
-    const [tab, setTab] = useState<"analytics" | "users" | "api-keys" | "usage" | "pricing" | "tools" | "channels">("analytics");
+    const [tab, setTab] = useState<"analytics" | "users" | "api-keys" | "usage" | "pricing" | "tools" | "channels" | "models">("analytics");
     const [analytics, setAnalytics] = useState<any>(null);
     const [users, setUsers] = useState<any[]>([]);
     const [search, setSearch] = useState("");
@@ -44,6 +44,12 @@ export default function AdminPage() {
     const [showAddChannel, setShowAddChannel] = useState(false);
     const [newChannel, setNewChannel] = useState({ slug: "", name: "", icon: "📱", description: "", badge: "stable", is_upcoming: false });
 
+    // Models config state
+    const [modelsConfig, setModelsConfig] = useState<any>(null);
+    const [modelsLoading, setModelsLoading] = useState(false);
+    const [modelsSaving, setModelsSaving] = useState(false);
+    const [modelsMsg, setModelsMsg] = useState<{ type: string; text: string } | null>(null);
+
     useEffect(() => {
         loadAnalytics();
         loadUsers();
@@ -55,6 +61,7 @@ export default function AdminPage() {
         if (tab === "pricing") loadPricing();
         if (tab === "tools") loadAdminTools();
         if (tab === "channels") loadAdminChannels();
+        if (tab === "models") loadModelsConfig();
     }, [tab]);
 
     const loadAnalytics = async () => {
@@ -94,6 +101,9 @@ export default function AdminPage() {
     };
 
     const handleBlock = async (userId: string) => {
+        const user = users.find(u => u.id === userId);
+        const action = user?.email_verified ? "block" : "unblock";
+        if (action === "block" && !confirm(`Are you sure you want to block this user? They will not be able to login.`)) return;
         await adminApi.blockUser(userId);
         loadUsers(search);
     };
@@ -101,6 +111,16 @@ export default function AdminPage() {
     const handleResetQuota = async (userId: string) => {
         await adminApi.resetQuota(userId);
         loadUsers(search);
+    };
+
+    const handleChangeRole = async (userId: string, newRole: string) => {
+        if (newRole === "admin" && !confirm("Grant admin access to this user? They will have full platform control.")) return;
+        try {
+            await adminApi.changeRole(userId, newRole);
+            loadUsers(search);
+        } catch (err: any) {
+            alert(err?.response?.data?.detail || "Failed to change role");
+        }
     };
 
     const handleSaveKey = async (slug: string) => {
@@ -245,6 +265,68 @@ export default function AdminPage() {
         } catch { }
     };
 
+    // ─── Models Config Management ───
+    const loadModelsConfig = async () => {
+        setModelsLoading(true);
+        try {
+            const res = await adminApi.getModels();
+            setModelsConfig(res.data);
+        } catch { }
+        setModelsLoading(false);
+    };
+
+    const handleToggleModelPlan = (providerIdx: number, modelIdx: number, plan: string) => {
+        setModelsConfig((prev: any) => {
+            const updated = JSON.parse(JSON.stringify(prev));
+            const model = updated.providers[providerIdx].models[modelIdx];
+            if (model.plans.includes(plan)) {
+                model.plans = model.plans.filter((p: string) => p !== plan);
+            } else {
+                model.plans.push(plan);
+            }
+            return updated;
+        });
+    };
+
+    const handleSaveModels = async () => {
+        setModelsSaving(true);
+        setModelsMsg(null);
+        try {
+            await adminApi.updateModels(modelsConfig);
+            setModelsMsg({ type: "success", text: "Model access configuration saved!" });
+        } catch {
+            setModelsMsg({ type: "error", text: "Failed to save." });
+        }
+        setModelsSaving(false);
+        setTimeout(() => setModelsMsg(null), 3000);
+    };
+
+    const handleQuickAction = (action: string) => {
+        setModelsConfig((prev: any) => {
+            const updated = JSON.parse(JSON.stringify(prev));
+            updated.providers.forEach((provider: any) => {
+                provider.models.forEach((model: any) => {
+                    if (action === "allow-all-free") {
+                        if (!model.plans.includes("free")) model.plans.push("free");
+                    } else if (action === "restrict-premium") {
+                        if (model.cost_tier >= 3) {
+                            model.plans = model.plans.filter((p: string) => p === "business");
+                        }
+                    } else if (action === "reset") {
+                        if (model.cost_tier === 1) {
+                            model.plans = ["free", "starter", "growth", "business"];
+                        } else if (model.cost_tier === 2) {
+                            model.plans = ["starter", "growth", "business"];
+                        } else {
+                            model.plans = ["growth", "business"];
+                        }
+                    }
+                });
+            });
+            return updated;
+        });
+    };
+
     const handleSeedChannels = async () => {
         try {
             await adminApi.seedChannels();
@@ -255,6 +337,7 @@ export default function AdminPage() {
     const tabs = [
         { key: "analytics", label: "📊 Analytics" },
         { key: "api-keys", label: "🔑 API Keys" },
+        { key: "models", label: "🧠 AI Models" },
         { key: "tools", label: "🔧 Tools" },
         { key: "channels", label: "📱 Channels" },
         { key: "pricing", label: "💰 Pricing" },
@@ -491,51 +574,80 @@ export default function AdminPage() {
 
                     <div className="text-sm text-slate-400 mb-4">{totalUsers} total users</div>
 
-                    <div className="glass rounded-2xl overflow-hidden">
-                        <table className="w-full">
+                    <div className="glass rounded-2xl overflow-hidden overflow-x-auto">
+                        <table className="w-full min-w-[900px]">
                             <thead>
                                 <tr className="border-b border-slate-700/50">
-                                    <th className="text-left px-6 py-4 text-xs font-semibold text-slate-400 uppercase">Name</th>
-                                    <th className="text-left px-6 py-4 text-xs font-semibold text-slate-400 uppercase">Email</th>
+                                    <th className="text-left px-6 py-4 text-xs font-semibold text-slate-400 uppercase">User</th>
                                     <th className="text-left px-6 py-4 text-xs font-semibold text-slate-400 uppercase">Role</th>
                                     <th className="text-left px-6 py-4 text-xs font-semibold text-slate-400 uppercase">Status</th>
+                                    <th className="text-left px-6 py-4 text-xs font-semibold text-slate-400 uppercase">Joined</th>
                                     <th className="text-right px-6 py-4 text-xs font-semibold text-slate-400 uppercase">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {users.map((u) => (
-                                    <tr key={u.id} className="border-b border-slate-800/50 hover:bg-slate-800/20">
-                                        <td className="px-6 py-4 text-sm text-white">{u.name}</td>
-                                        <td className="px-6 py-4 text-sm text-slate-400">{u.email}</td>
-                                        <td className="px-6 py-4">
-                                            <span className={`text-xs px-2 py-0.5 rounded-full ${u.role === "admin" ? "bg-red-500/10 text-red-400" : "bg-slate-600/30 text-slate-400"
-                                                }`}>
-                                                {u.role}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <span className={`text-xs ${u.email_verified ? "text-green-400" : "text-red-400"}`}>
-                                                {u.email_verified ? "Active" : "Blocked"}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4 text-right">
-                                            <div className="flex items-center justify-end gap-2">
-                                                <button
-                                                    onClick={() => handleBlock(u.id)}
-                                                    className="text-xs px-3 py-1.5 rounded-lg bg-slate-700/50 text-slate-300 hover:bg-slate-700"
+                                {users.map((u) => {
+                                    const isBlocked = !u.email_verified;
+                                    return (
+                                        <tr key={u.id} className={`border-b border-slate-800/50 hover:bg-slate-800/20 transition-colors ${isBlocked ? "opacity-70" : ""}`}>
+                                            <td className="px-6 py-4">
+                                                <div className="flex items-center gap-3">
+                                                    <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold ${u.role === "admin" ? "bg-purple-500/20 text-purple-400" : "bg-indigo-500/20 text-indigo-400"}`}>
+                                                        {u.name?.charAt(0)?.toUpperCase() || "?"}
+                                                    </div>
+                                                    <div>
+                                                        <div className="text-sm text-white font-medium">{u.name}</div>
+                                                        <div className="text-xs text-slate-500">{u.email}</div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <select
+                                                    value={u.role}
+                                                    onChange={(e) => handleChangeRole(u.id, e.target.value)}
+                                                    className={`text-xs px-3 py-1.5 rounded-lg font-medium border focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all cursor-pointer ${u.role === "admin"
+                                                        ? "bg-purple-500/10 text-purple-400 border-purple-500/30"
+                                                        : "bg-slate-800/50 text-slate-300 border-slate-600/50"
+                                                        }`}
                                                 >
-                                                    {u.email_verified ? "Block" : "Unblock"}
-                                                </button>
-                                                <button
-                                                    onClick={() => handleResetQuota(u.id)}
-                                                    className="text-xs px-3 py-1.5 rounded-lg bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20"
-                                                >
-                                                    Reset Quota
-                                                </button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))}
+                                                    <option value="user">👤 User</option>
+                                                    <option value="admin">👑 Admin</option>
+                                                </select>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <span className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full font-medium ${isBlocked
+                                                    ? "bg-red-500/10 text-red-400 border border-red-500/20"
+                                                    : "bg-green-500/10 text-green-400 border border-green-500/20"
+                                                    }`}>
+                                                    <span className={`w-1.5 h-1.5 rounded-full ${isBlocked ? "bg-red-400" : "bg-green-400 animate-pulse"}`} />
+                                                    {isBlocked ? "Blocked" : "Active"}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4 text-xs text-slate-500">
+                                                {u.created_at ? new Date(u.created_at).toLocaleDateString() : "—"}
+                                            </td>
+                                            <td className="px-6 py-4 text-right">
+                                                <div className="flex items-center justify-end gap-2">
+                                                    <button
+                                                        onClick={() => handleBlock(u.id)}
+                                                        className={`text-xs px-3 py-1.5 rounded-lg font-medium transition-all ${isBlocked
+                                                            ? "bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-green-500/20"
+                                                            : "bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20"
+                                                            }`}
+                                                    >
+                                                        {isBlocked ? "✓ Unblock" : "🚫 Block"}
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleResetQuota(u.id)}
+                                                        className="text-xs px-3 py-1.5 rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 hover:bg-indigo-500/20 transition-all"
+                                                    >
+                                                        ↻ Reset Quota
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
                             </tbody>
                         </table>
                     </div>
@@ -930,6 +1042,156 @@ export default function AdminPage() {
                                 );
                             })}
                         </div>
+                    )}
+                </div>
+            )}
+
+            {/* ═══ AI Models Tab ═══ */}
+            {tab === "models" && (
+                <div className="max-w-5xl mx-auto">
+                    {/* Header */}
+                    <div className="flex items-center justify-between mb-6">
+                        <div>
+                            <h2 className="text-xl font-bold text-white flex items-center gap-2">🧠 AI Model Access Control</h2>
+                            <p className="text-sm text-slate-400 mt-1">Configure which AI models are available for each subscription plan</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            {modelsMsg && (
+                                <span className={`text-xs px-3 py-1.5 rounded-lg ${modelsMsg.type === "success" ? "bg-green-500/10 text-green-400 border border-green-500/20" : "bg-red-500/10 text-red-400 border border-red-500/20"}`}>
+                                    {modelsMsg.text}
+                                </span>
+                            )}
+                            <button
+                                onClick={handleSaveModels}
+                                disabled={modelsSaving}
+                                className="px-5 py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-indigo-500 to-purple-500 text-white hover:opacity-90 transition-all disabled:opacity-50 flex items-center gap-2"
+                            >
+                                {modelsSaving ? (
+                                    <>
+                                        <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                        Saving...
+                                    </>
+                                ) : "💾 Save Changes"}
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Quick Actions */}
+                    <div className="flex items-center gap-2 mb-6">
+                        <span className="text-xs text-slate-500 mr-2">Quick:</span>
+                        <button onClick={() => handleQuickAction("allow-all-free")} className="px-3 py-1.5 rounded-lg text-xs font-medium bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-green-500/20 transition-all">
+                            ✅ Allow All Free
+                        </button>
+                        <button onClick={() => handleQuickAction("restrict-premium")} className="px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20 hover:bg-amber-500/20 transition-all">
+                            🔒 Restrict Premium
+                        </button>
+                        <button onClick={() => handleQuickAction("reset")} className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-600/30 text-slate-400 border border-slate-600/30 hover:bg-slate-600/50 transition-all">
+                            ↻ Reset Defaults
+                        </button>
+                    </div>
+
+                    {/* Info Banner */}
+                    <div className="p-4 rounded-xl bg-indigo-500/5 border border-indigo-500/20 mb-6">
+                        <div className="flex items-start gap-3">
+                            <span className="text-lg mt-0.5">💡</span>
+                            <div>
+                                <p className="text-sm font-medium text-indigo-300">How it works</p>
+                                <p className="text-xs text-slate-400 mt-1">
+                                    Toggle models ON/OFF for each plan. Users can only select models that are enabled for their subscription tier when creating agents. Admin users always have full access.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    {modelsLoading ? (
+                        <div className="flex justify-center py-12">
+                            <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+                        </div>
+                    ) : modelsConfig ? (
+                        <div className="space-y-6">
+                            {modelsConfig.providers?.map((provider: any, pIdx: number) => {
+                                const providerColors: Record<string, string> = {
+                                    openai: "border-green-500/30 bg-green-500/5",
+                                    anthropic: "border-orange-500/30 bg-orange-500/5",
+                                    google: "border-blue-500/30 bg-blue-500/5",
+                                };
+                                return (
+                                    <div key={provider.id} className={`rounded-2xl border ${providerColors[provider.id] || "border-slate-700/50 bg-slate-800/20"} overflow-hidden`}>
+                                        {/* Provider Header */}
+                                        <div className="px-6 py-4 border-b border-slate-700/30 flex items-center gap-3">
+                                            <span className="text-2xl">{provider.icon}</span>
+                                            <div>
+                                                <h3 className="text-base font-semibold text-white">{provider.name}</h3>
+                                                <p className="text-xs text-slate-400">{provider.models.length} models</p>
+                                            </div>
+                                        </div>
+
+                                        {/* Matrix Table */}
+                                        <div className="overflow-x-auto">
+                                            <table className="w-full">
+                                                <thead>
+                                                    <tr className="border-b border-slate-700/30">
+                                                        <th className="text-left px-6 py-3 text-xs font-semibold text-slate-400 uppercase w-[200px]">Model</th>
+                                                        <th className="text-center px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Cost</th>
+                                                        {["free", "starter", "growth", "business"].map((plan) => {
+                                                            const planColors: Record<string, string> = {
+                                                                free: "bg-slate-600/30 text-slate-300",
+                                                                starter: "bg-blue-500/15 text-blue-400",
+                                                                growth: "bg-purple-500/15 text-purple-400",
+                                                                business: "bg-amber-500/15 text-amber-400",
+                                                            };
+                                                            return (
+                                                                <th key={plan} className="text-center px-4 py-3">
+                                                                    <span className={`text-[10px] uppercase font-bold px-2.5 py-1 rounded-full ${planColors[plan]}`}>
+                                                                        {plan}
+                                                                    </span>
+                                                                </th>
+                                                            );
+                                                        })}
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {provider.models.map((model: any, mIdx: number) => (
+                                                        <tr key={model.id} className="border-b border-slate-800/40 hover:bg-slate-800/20 transition-colors">
+                                                            <td className="px-6 py-4">
+                                                                <div className="text-sm text-white font-medium">{model.name}</div>
+                                                                <div className="text-xs text-slate-500 mt-0.5">{model.desc}</div>
+                                                            </td>
+                                                            <td className="px-4 py-4 text-center">
+                                                                <span className="text-xs text-amber-400/80">
+                                                                    {"💰".repeat(model.cost_tier || 1)}
+                                                                </span>
+                                                            </td>
+                                                            {["free", "starter", "growth", "business"].map((plan) => {
+                                                                const isEnabled = model.plans?.includes(plan);
+                                                                return (
+                                                                    <td key={plan} className="px-4 py-4 text-center">
+                                                                        <button
+                                                                            onClick={() => handleToggleModelPlan(pIdx, mIdx, plan)}
+                                                                            className={`w-[42px] h-[22px] rounded-full transition-all duration-200 relative focus:outline-none ${isEnabled
+                                                                                ? "bg-green-500 shadow-lg shadow-green-500/20"
+                                                                                : "bg-slate-700 hover:bg-slate-600"
+                                                                                }`}
+                                                                        >
+                                                                            <div className={`w-4 h-4 rounded-full absolute top-[3px] transition-all duration-200 ${isEnabled
+                                                                                ? "bg-white translate-x-[22px]"
+                                                                                : "bg-slate-400 translate-x-[4px]"
+                                                                                }`} />
+                                                                        </button>
+                                                                    </td>
+                                                                );
+                                                            })}
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    ) : (
+                        <div className="text-center py-12 text-slate-500">No model configuration found</div>
                     )}
                 </div>
             )}

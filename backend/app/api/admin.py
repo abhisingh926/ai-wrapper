@@ -1,5 +1,5 @@
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from pydantic import BaseModel
@@ -63,6 +63,35 @@ async def toggle_block_user(
     await db.commit()
     status = "unblocked" if user.email_verified else "blocked"
     return {"message": f"User {status}"}
+
+
+class ChangeRoleRequest(BaseModel):
+    role: str  # "user" or "admin"
+
+
+@router.put("/users/{user_id}/role")
+async def change_user_role(
+    user_id: str,
+    data: ChangeRoleRequest,
+    current_user: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Change a user's role (admin only)."""
+    if data.role not in ("user", "admin"):
+        raise HTTPException(status_code=400, detail="Invalid role. Must be 'user' or 'admin'")
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Prevent admin from demoting themselves
+    if str(user.id) == str(current_user.id) and data.role != "admin":
+        raise HTTPException(status_code=400, detail="Cannot change your own role")
+
+    user.role = UserRole(data.role)
+    await db.commit()
+    return {"message": f"User role changed to {data.role}"}
 
 
 @router.put("/users/{user_id}/reset-quota")
@@ -595,3 +624,45 @@ async def seed_default_channels(
     
     await db.commit()
     return {"message": "Default channels seeded successfully."}
+
+
+# ── AI Model Access Control ──
+
+import json, os
+
+MODELS_CONFIG_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "models_config.json")
+
+def load_models_config() -> dict:
+    """Load model-plan access config from JSON file."""
+    try:
+        with open(MODELS_CONFIG_FILE, "r") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {"providers": []}
+
+
+def save_models_config(config: dict):
+    """Save model-plan access config to JSON file."""
+    with open(MODELS_CONFIG_FILE, "w") as f:
+        json.dump(config, f, indent=2)
+
+
+@router.get("/models")
+async def get_models_config(_admin: User = Depends(require_admin)):
+    """Get the model-plan access control matrix."""
+    return load_models_config()
+
+
+@router.put("/models")
+async def update_models_config(
+    request: Request,
+    _admin: User = Depends(require_admin),
+):
+    """Update the model-plan access control matrix."""
+
+    body = await request.json()
+    if "providers" not in body:
+        raise HTTPException(status_code=400, detail="Invalid config: missing 'providers'")
+    save_models_config(body)
+    return {"message": "Model access configuration saved successfully."}
+

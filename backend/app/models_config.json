@@ -1,0 +1,126 @@
+{
+    "providers": [
+        {
+            "id": "openai",
+            "name": "OpenAI",
+            "icon": "🤖",
+            "color": "from-green-500 to-emerald-600",
+            "models": [
+                {
+                    "id": "gpt-4o",
+                    "name": "GPT-4o",
+                    "desc": "Most capable, multimodal",
+                    "cost_tier": 3,
+                    "plans": [
+                        "starter",
+                        "growth",
+                        "business"
+                    ]
+                },
+                {
+                    "id": "gpt-4o-mini",
+                    "name": "GPT-4o Mini",
+                    "desc": "Fast & affordable",
+                    "cost_tier": 1,
+                    "plans": [
+                        "free",
+                        "starter",
+                        "growth",
+                        "business"
+                    ]
+                },
+                {
+                    "id": "gpt-4-turbo",
+                    "name": "GPT-4 Turbo",
+                    "desc": "High reasoning",
+                    "cost_tier": 3,
+                    "plans": [
+                        "growth",
+                        "business"
+                    ]
+                }
+            ]
+        },
+        {
+            "id": "anthropic",
+            "name": "Anthropic",
+            "icon": "🧠",
+            "color": "from-orange-500 to-amber-600",
+            "models": [
+                {
+                    "id": "claude-3-5-sonnet",
+                    "name": "Claude 3.5 Sonnet",
+                    "desc": "Best balanced",
+                    "cost_tier": 2,
+                    "plans": [
+                        "starter",
+                        "growth",
+                        "business"
+                    ]
+                },
+                {
+                    "id": "claude-3-opus",
+                    "name": "Claude 3 Opus",
+                    "desc": "Most powerful",
+                    "cost_tier": 3,
+                    "plans": [
+                        "business"
+                    ]
+                },
+                {
+                    "id": "claude-3-haiku",
+                    "name": "Claude 3 Haiku",
+                    "desc": "Fastest",
+                    "cost_tier": 1,
+                    "plans": [
+                        "free",
+                        "starter",
+                        "growth",
+                        "business"
+                    ]
+                }
+            ]
+        },
+        {
+            "id": "google",
+            "name": "Google",
+            "icon": "✨",
+            "color": "from-blue-500 to-indigo-600",
+            "models": [
+                {
+                    "id": "gemini-pro",
+                    "name": "Gemini Pro",
+                    "desc": "Best all-around",
+                    "cost_tier": 2,
+                    "plans": [
+                        "starter",
+                        "growth",
+                        "business"
+                    ]
+                },
+                {
+                    "id": "gemini-pro-1.5",
+                    "name": "Gemini 1.5 Pro",
+                    "desc": "Long context",
+                    "cost_tier": 3,
+                    "plans": [
+                        "growth",
+                        "business"
+                    ]
+                },
+                {
+                    "id": "gemini-flash",
+                    "name": "Gemini Flash",
+                    "desc": "Ultra fast",
+                    "cost_tier": 1,
+                    "plans": [
+                        "free",
+                        "starter",
+                        "growth",
+                        "business"
+                    ]
+                }
+            ]
+        }
+    ]
+}

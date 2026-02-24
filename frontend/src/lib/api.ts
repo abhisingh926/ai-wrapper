@@ -96,6 +96,7 @@ export const adminApi = {
     users: (params?: { search?: string; limit?: number; offset?: number }) =>
         api.get("/api/admin/users", { params }),
     blockUser: (id: string) => api.put(`/api/admin/users/${id}/block`),
+    changeRole: (id: string, role: string) => api.put(`/api/admin/users/${id}/role`, { role }),
     resetQuota: (id: string) => api.put(`/api/admin/users/${id}/reset-quota`),
     analytics: () => api.get("/api/admin/analytics"),
     subscriptions: () => api.get("/api/admin/subscriptions"),
@@ -122,6 +123,10 @@ export const adminApi = {
     updateChannel: (id: string, data: any) => api.put(`/api/admin/channels/${id}`, data),
     deleteChannel: (id: string) => api.delete(`/api/admin/channels/${id}`),
     seedChannels: () => api.post("/api/admin/channels/seed"),
+
+    // AI Model Access Control
+    getModels: () => api.get("/api/admin/models"),
+    updateModels: (config: any) => api.put("/api/admin/models", config),
 };
 
 /* ──── Assistant API ──── */
@@ -153,6 +158,7 @@ export const agentApi = {
     pause: (id: string) => api.post(`/api/agents/${id}/pause`),
     dashboardStats: (id: string) => api.get(`/api/agents/${id}/dashboard-stats`),
     sessionMessages: (agentId: string, sessionId: string) => api.get(`/api/agents/${agentId}/sessions/${sessionId}/messages`),
+    availableModels: () => api.get("/api/agents/models/available"),
 };
 
 /* ──── Knowledge API ──── */

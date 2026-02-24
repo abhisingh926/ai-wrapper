@@ -70,18 +70,32 @@ async def list_plans():
     return list(get_plan_responses().values())
 
 
-@router.get("/subscription", response_model=SubscriptionResponse)
+@router.get("/subscription")
 async def get_subscription(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Get current user's subscription details."""
+    from app.models.user import UserRole
     result = await db.execute(
         select(Subscription).where(Subscription.user_id == current_user.id)
     )
     subscription = result.scalar_one_or_none()
     if not subscription:
         raise HTTPException(status_code=404, detail="No subscription found")
+
+    # Admin users get unlimited access
+    if current_user.role == UserRole.ADMIN:
+        return {
+            "id": str(subscription.id),
+            "plan": "admin",
+            "status": "active",
+            "agent_limit": 999,
+            "message_limit": 999999,
+            "messages_used": subscription.messages_used or 0,
+            "stripe_customer_id": subscription.stripe_customer_id,
+            "stripe_subscription_id": subscription.stripe_subscription_id,
+        }
     return subscription
 
 

@@ -34,7 +34,7 @@ type Tool = {
     badge: string;
 };
 
-const aiProviders = [
+const fallbackProviders = [
     {
         id: "openai", name: "OpenAI", icon: "🤖",
         models: [
@@ -60,6 +60,9 @@ const aiProviders = [
         ],
     },
 ];
+
+type DynamicModel = { id: string; name: string; allowed: boolean; min_plan?: string };
+type DynamicProvider = { id: string; name: string; icon: string; models: DynamicModel[] };
 
 // Platforms are now fetched from the database dynamically via channelsApi
 
@@ -161,6 +164,11 @@ export default function AgentViewPage() {
     const [isWaStreaming, setIsWaStreaming] = useState(false);
     const [waQrConnected, setWaQrConnected] = useState(false);
 
+    // Dynamic AI providers from API
+    const [aiProviders, setAiProviders] = useState<DynamicProvider[]>(
+        fallbackProviders.map(p => ({ ...p, models: p.models.map(m => ({ ...m, allowed: true })) }))
+    );
+
     // Discord State
     const [discordToken, setDiscordToken] = useState("");
     const [discordConnected, setDiscordConnected] = useState(false);
@@ -193,6 +201,15 @@ export default function AgentViewPage() {
             loadData(params.id as string);
             loadKnowledge(params.id as string);
         }
+        // Load available models based on user's plan
+        agentApi.availableModels().then((res) => {
+            setAiProviders(res.data.providers || []);
+        }).catch(() => {
+            // Fallback: all models allowed
+            setAiProviders(fallbackProviders.map(p => ({
+                ...p, models: p.models.map(m => ({ ...m, allowed: true }))
+            })));
+        });
     }, [params]);
 
     // Activity (Live Logs) data fetching
@@ -699,8 +716,12 @@ export default function AgentViewPage() {
                                                 {aiProviders.map(p => (
                                                     <optgroup key={p.id} label={p.name}>
                                                         {p.models.map(m => (
-                                                            <option key={m.id} value={`${p.id}:${m.id}`}>
-                                                                {m.name}
+                                                            <option
+                                                                key={m.id}
+                                                                value={`${p.id}:${m.id}`}
+                                                                disabled={!m.allowed}
+                                                            >
+                                                                {!m.allowed ? `🔒 ${m.name} (${(m.min_plan || 'Upgrade').charAt(0).toUpperCase() + (m.min_plan || 'Upgrade').slice(1)})` : m.name}
                                                             </option>
                                                         ))}
                                                     </optgroup>

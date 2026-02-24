@@ -313,6 +313,11 @@ async def oauth_callback(
         await db.commit()
         await db.refresh(user)
 
-    # Issue JWT
+    # Issue JWT (but block if user is blocked)
+    if not user.email_verified:
+        raise HTTPException(
+            status_code=403,
+            detail="Your account has been blocked. Please contact support."
+        )
     jwt_token = create_access_token(data={"sub": str(user.id)})
     return {"access_token": jwt_token, "token_type": "bearer", "provider": provider}

@@ -6,7 +6,8 @@ import { agentApi, toolsApi, channelsApi, assistantApi } from "@/lib/api";
 
 /* ─── Data ─── */
 
-const aiProviders = [
+// Fallback providers (used if API fails)
+const fallbackProviders = [
     {
         id: "openai", name: "OpenAI", icon: "🤖", color: "from-green-500 to-emerald-600",
         models: [
@@ -32,6 +33,10 @@ const aiProviders = [
         ],
     },
 ];
+
+// Type for dynamic model data
+type DynamicModel = { id: string; name: string; desc: string; cost_tier?: number; allowed: boolean; min_plan?: string; plans?: string[] };
+type DynamicProvider = { id: string; name: string; icon: string; color: string; models: DynamicModel[] };
 
 // Platforms are now fetched from the database dynamically via channelsApi
 
@@ -116,9 +121,25 @@ export default function CreateAgentPage() {
     const [customDescription, setCustomDescription] = useState("");
     const [isGeneratingPrompt, setIsGeneratingPrompt] = useState(false);
 
+    // Dynamic AI providers from API
+    const [aiProviders, setAiProviders] = useState<DynamicProvider[]>([]);
+    const [modelsLoaded, setModelsLoaded] = useState(false);
+
     useEffect(() => {
         toolsApi.list().then((res) => setTools(res.data)).catch(console.error);
         channelsApi.list().then((res) => setPlatforms(res.data)).catch(console.error);
+        // Load available models based on user's plan
+        agentApi.availableModels().then((res) => {
+            setAiProviders(res.data.providers || []);
+            setModelsLoaded(true);
+        }).catch(() => {
+            // Fallback to hardcoded (all allowed)
+            setAiProviders(fallbackProviders.map(p => ({
+                ...p,
+                models: p.models.map(m => ({ ...m, allowed: true, min_plan: "free" }))
+            })));
+            setModelsLoaded(true);
+        });
     }, []);
 
     const provider = aiProviders.find((p) => p.id === selectedProvider);
@@ -252,19 +273,30 @@ export default function CreateAgentPage() {
                             <div className="mb-8">
                                 <h3 className="text-sm font-semibold text-slate-300 mb-3">Select Model</h3>
                                 <div className="grid grid-cols-3 gap-3">
-                                    {provider?.models.map((m) => (
-                                        <button
-                                            key={m.id}
-                                            onClick={() => setSelectedModel(m.id)}
-                                            className={`p-4 rounded-xl border transition-all text-left ${selectedModel === m.id
-                                                ? "border-cyan-500/50 bg-cyan-500/10"
-                                                : "border-slate-700/40 bg-slate-800/20 hover:border-slate-600"
-                                                }`}
-                                        >
-                                            <div className="text-white font-medium text-sm">{m.name}</div>
-                                            <div className="text-xs text-slate-400 mt-0.5">{m.desc}</div>
-                                        </button>
-                                    ))}
+                                    {provider?.models.map((m) => {
+                                        const isLocked = !m.allowed;
+                                        return (
+                                            <button
+                                                key={m.id}
+                                                onClick={() => !isLocked && setSelectedModel(m.id)}
+                                                disabled={isLocked}
+                                                className={`p-4 rounded-xl border transition-all text-left relative ${isLocked
+                                                    ? "border-slate-700/20 bg-slate-800/10 opacity-50 cursor-not-allowed"
+                                                    : selectedModel === m.id
+                                                        ? "border-cyan-500/50 bg-cyan-500/10"
+                                                        : "border-slate-700/40 bg-slate-800/20 hover:border-slate-600"
+                                                    }`}
+                                            >
+                                                <div className="text-white font-medium text-sm">{m.name}</div>
+                                                <div className="text-xs text-slate-400 mt-0.5">{m.desc}</div>
+                                                {isLocked && (
+                                                    <div className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-400 text-[10px] font-semibold">
+                                                        🔒 {(m.min_plan || "Starter").charAt(0).toUpperCase() + (m.min_plan || "Starter").slice(1)}
+                                                    </div>
+                                                )}
+                                            </button>
+                                        );
+                                    })}
                                 </div>
                             </div>
                         )}

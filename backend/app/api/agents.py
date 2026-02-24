@@ -90,6 +90,47 @@ class ChatResponse(BaseModel):
 
 # ── Endpoints ──
 
+@router.get("/models/available")
+async def get_available_models(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return all models with 'allowed' flag based on user's plan. Admins get all."""
+    from app.api.admin import load_models_config
+    config = load_models_config()
+
+    # Determine user's plan
+    user_plan = "free"
+    is_admin = current_user.role == UserRole.ADMIN
+    if not is_admin:
+        sub_result = await db.execute(
+            select(Subscription).where(Subscription.user_id == current_user.id)
+        )
+        subscription = sub_result.scalar_one_or_none()
+        if subscription:
+            user_plan = subscription.plan.value
+
+    # Annotate each model with allowed flag
+    result_providers = []
+    for provider in config.get("providers", []):
+        models = []
+        for model in provider.get("models", []):
+            models.append({
+                **model,
+                "allowed": is_admin or user_plan in model.get("plans", []),
+                "min_plan": model.get("plans", ["free"])[0] if model.get("plans") else "free",
+            })
+        result_providers.append({
+            "id": provider["id"],
+            "name": provider["name"],
+            "icon": provider.get("icon", "🤖"),
+            "color": provider.get("color", "from-slate-500 to-slate-600"),
+            "models": models,
+        })
+
+    return {"providers": result_providers, "user_plan": user_plan, "is_admin": is_admin}
+
+
 @router.get("")
 async def list_agents(
     current_user: User = Depends(get_current_user),
@@ -148,6 +189,23 @@ async def create_agent(
             raise HTTPException(
                 status_code=403,
                 detail=f"Agent limit reached. Your {subscription.plan.value.capitalize()} plan allows {limits['agent_limit']} agent(s). Please upgrade to create more."
+            )
+
+    # ── Enforce model access ──
+    if current_user.role != UserRole.ADMIN:
+        from app.api.admin import load_models_config
+        config = load_models_config()
+        user_plan = subscription.plan.value if subscription else "free"
+        allowed = False
+        for provider in config.get("providers", []):
+            for model in provider.get("models", []):
+                if model["id"] == data.ai_model and user_plan in model.get("plans", []):
+                    allowed = True
+                    break
+        if not allowed:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Model '{data.ai_model}' is not available on your {user_plan.capitalize()} plan. Please upgrade to access this model."
             )
     agent = Agent(
         user_id=current_user.id,
@@ -238,6 +296,30 @@ async def update_agent(
     if data.ai_provider is not None:
         agent.ai_provider = data.ai_provider
     if data.ai_model is not None:
+        # Validate model access based on user plan
+        if current_user.role != UserRole.ADMIN:
+            config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "models_config.json")
+            if os.path.exists(config_path):
+                with open(config_path) as f:
+                    models_data = json.load(f)
+                # Get user's plan
+                sub_result = await db.execute(
+                    select(Subscription).where(Subscription.user_id == current_user.id)
+                )
+                subscription = sub_result.scalar_one_or_none()
+                user_plan = subscription.plan.value if subscription else "free"
+                # Check if model is allowed for this plan
+                model_allowed = False
+                for provider in models_data.get("providers", []):
+                    for model in provider.get("models", []):
+                        if model["id"] == data.ai_model and user_plan in model.get("plans", []):
+                            model_allowed = True
+                            break
+                if not model_allowed:
+                    raise HTTPException(
+                        status_code=403,
+                        detail=f"Model '{data.ai_model}' is not available on your current plan. Please upgrade."
+                    )
         agent.ai_model = data.ai_model
     if data.platform is not None:
         agent.platform = data.platform
