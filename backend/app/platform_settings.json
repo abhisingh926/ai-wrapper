@@ -1,0 +1,18 @@
+{
+  "max_scrape_pages": 100,
+  "max_content_size_kb": 200,
+  "allowed_file_types": [
+    ".pdf",
+    ".txt",
+    ".csv",
+    ".docx",
+    ".md"
+  ],
+  "max_upload_size_mb": 10,
+  "url_scraping_by_plan": {
+    "free": false,
+    "starter": true,
+    "growth": true,
+    "business": true
+  }
+}

@@ -42,6 +42,10 @@ async def whatsapp_webhook(
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
 
+    # If agent is not live (paused/draft), silently ignore — no reply
+    if agent.status != "live":
+        return {"status": "ignored", "reason": "agent is not live"}
+
     # 3. Format payload for chat engine
     # OpenClaw WhatsApp webhooks use the sender's phone number as a deterministic session ID
     user_messages = [{"role": "user", "content": body}]
@@ -57,8 +61,8 @@ async def whatsapp_webhook(
         return {"reply": reply_text}
     except Exception as e:
         print(f"WhatsApp Webhook Error for Agent {agent_id}: {str(e)}")
-        # We return a generic error message that will be broadcast back to the WhatsApp user
-        return {"reply": "Sorry, I am currently experiencing technical difficulties. Please try again later."}
+        # Return the actual error to the user so they know what went wrong
+        return {"reply": f"Error: {str(e)}"}
 
 @router.post("/discord")
 async def discord_webhook(
@@ -87,6 +91,9 @@ async def discord_webhook(
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
 
+    if agent.status != "live":
+        return {"status": "ignored", "reason": "agent is not live"}
+
     user_messages = [{"role": "user", "content": body}]
     
     try:
@@ -100,7 +107,7 @@ async def discord_webhook(
         return {"reply": reply_text}
     except Exception as e:
         print(f"Discord Webhook Error for Agent {agent_id}: {str(e)}")
-        return {"reply": "Sorry, I am currently experiencing technical difficulties. Please try again later."}
+        return {"reply": f"Error: {str(e)}"}
 
 @router.post("/slack")
 async def slack_webhook(
@@ -129,6 +136,9 @@ async def slack_webhook(
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
 
+    if agent.status != "live":
+        return {"status": "ignored", "reason": "agent is not live"}
+
     user_messages = [{"role": "user", "content": body}]
     
     try:
@@ -142,4 +152,4 @@ async def slack_webhook(
         return {"reply": reply_text}
     except Exception as e:
         print(f"Slack Webhook Error for Agent {agent_id}: {str(e)}")
-        return {"reply": "Sorry, I am currently experiencing technical difficulties. Please try again later."}
+        return {"reply": f"Error: {str(e)}"}

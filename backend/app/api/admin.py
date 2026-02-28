@@ -421,6 +421,7 @@ class ToolUpdate(BaseModel):
     enabled: Optional[bool] = None
     badge: Optional[str] = None
     sort_order: Optional[int] = None
+    config: Optional[dict] = None
 
 
 @router.get("/tools")
@@ -442,6 +443,7 @@ async def admin_list_tools(
             "enabled": t.enabled,
             "badge": t.badge,
             "sort_order": t.sort_order,
+            "config": t.config or {},
         }
         for t in tools
     ]
@@ -666,3 +668,43 @@ async def update_models_config(
     save_models_config(body)
     return {"message": "Model access configuration saved successfully."}
 
+
+# ── Platform Settings ──
+
+PLATFORM_SETTINGS_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "platform_settings.json")
+
+def load_platform_settings() -> dict:
+    try:
+        with open(PLATFORM_SETTINGS_FILE, "r") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {"max_scrape_pages": 10, "max_content_size_kb": 200}
+
+
+def save_platform_settings(config: dict):
+    with open(PLATFORM_SETTINGS_FILE, "w") as f:
+        json.dump(config, f, indent=2)
+
+
+@router.get("/settings")
+async def get_platform_settings(_admin: User = Depends(require_admin)):
+    """Get platform settings."""
+    return load_platform_settings()
+
+
+@router.put("/settings")
+async def update_platform_settings(
+    request: Request,
+    _admin: User = Depends(require_admin),
+):
+    """Update platform settings."""
+    body = await request.json()
+    # Validate
+    max_pages = body.get("max_scrape_pages", 10)
+    max_size = body.get("max_content_size_kb", 200)
+    if not isinstance(max_pages, int) or max_pages < 1 or max_pages > 500:
+        raise HTTPException(status_code=400, detail="max_scrape_pages must be between 1 and 500")
+    if not isinstance(max_size, int) or max_size < 50 or max_size > 1000:
+        raise HTTPException(status_code=400, detail="max_content_size_kb must be between 50 and 1000")
+    save_platform_settings(body)
+    return {"message": "Settings saved successfully."}

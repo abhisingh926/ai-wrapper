@@ -1,4 +1,5 @@
 import json
+import os
 import time
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,7 +14,7 @@ from app.models.user import User
 from app.models.subscription import Subscription
 from app.models.chat_session import ChatSession, ChatMessage
 
-async def _parse_and_save_lead(reply_text: str, agent: Agent, lead_fields: list, user_messages: list, db: AsyncSession) -> str:
+async def _parse_and_save_lead(reply_text: str, agent: Agent, lead_fields: list, user_messages: list, db: AsyncSession, whatsapp_phone: str = None) -> str:
     """Helper function to parse the [LEAD_CAPTURED] token, save to backend, and strip it from user output."""
     if not lead_fields or "[LEAD_CAPTURED]" not in reply_text:
         return reply_text
@@ -37,7 +38,7 @@ async def _parse_and_save_lead(reply_text: str, agent: Agent, lead_fields: list,
             agent_id=agent.id,
             name=extracted_data.get("name"),
             email=extracted_data.get("email"),
-            phone=extracted_data.get("phone"),
+            phone=whatsapp_phone or extracted_data.get("phone"),
             company=extracted_data.get("company"),
             requirement=extracted_data.get("requirement", "Extracted dynamically by Lead Catcher."),
             status="new",
@@ -70,6 +71,10 @@ async def execute_agent_chat(
     - Token / message accounting
     """
     
+    # 0. Check Agent Status
+    if agent.status != "live":
+        raise Exception(f"This agent is currently {agent.status} and cannot process messages.")
+
     # 1. Build Base System Prompt
     system_prompt = agent.system_prompt or "You are a helpful AI assistant."
 
@@ -120,6 +125,7 @@ async def execute_agent_chat(
 
     # 4. Check for Lead Catcher tool and inject collection instructions
     lead_fields = []
+    whatsapp_phone = None  # Will be set if chat originates from WhatsApp
     if "lead_catcher" in (agent.tools or []):
         lc_config = (agent.tool_configs or {}).get("lead_catcher", {})
         field_labels = {
@@ -132,6 +138,14 @@ async def execute_agent_chat(
         for field, label in field_labels.items():
             if lc_config.get(field, True):
                 lead_fields.append(field)
+
+        # Auto-capture phone from WhatsApp sender
+        whatsapp_phone = None
+        if client_ip.startswith("whatsapp_"):
+            whatsapp_phone = client_ip.replace("whatsapp_", "")
+            # Remove phone from fields to collect — it's already known
+            if "phone" in lead_fields:
+                lead_fields.remove("phone")
 
         if lead_fields:
             fields_str = ", ".join([field_labels[f] for f in lead_fields])
@@ -181,6 +195,37 @@ RULES:
     # 7. Model Provider selection
     provider = agent.ai_provider.lower()
     model = agent.ai_model
+
+    # 7a. Check if model is still allowed (at runtime)
+    import json as _json
+    config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "models_config.json")
+    if os.path.exists(config_path):
+        with open(config_path) as f:
+            models_data = _json.load(f)
+        # Check if model exists in any provider's model list
+        model_found = False
+        model_plans = []
+        for prov in models_data.get("providers", []):
+            for m in prov.get("models", []):
+                if m["id"] == model:
+                    model_found = True
+                    model_plans = m.get("plans", [])
+                    break
+        if not model_found or len(model_plans) == 0:
+            raise Exception(f"The model '{model}' has been disabled by the administrator. Please update your agent's model.")
+        # Check user's plan (skip for admin or if no subscription check needed)
+        if subscription:
+            user_plan = subscription.plan.value
+        else:
+            user_plan = "free"
+        from app.models.user import UserRole
+        owner_result = await db.execute(
+            select(User).where(User.id == agent.user_id)
+        )
+        owner = owner_result.scalar_one_or_none()
+        if owner and owner.role != UserRole.ADMIN:
+            if user_plan not in model_plans:
+                raise Exception(f"The model '{model}' is no longer available on the {user_plan.capitalize()} plan. Please update your agent.")
     
     if provider == "google":
         litellm_model = f"gemini/{model}"
@@ -255,7 +300,16 @@ RULES:
                     
                     if fn_name == "get_weather":
                         from app.services.weather import get_weather
-                        tool_result = await get_weather(fn_args.get("city", ""))
+                        from app.models.tool import Tool as ToolModel
+                        # Look up weather API key from tool config
+                        weather_api_key = None
+                        tool_result_q = await db.execute(
+                            select(ToolModel).where(ToolModel.slug == "weather")
+                        )
+                        weather_tool = tool_result_q.scalar_one_or_none()
+                        if weather_tool and weather_tool.config:
+                            weather_api_key = weather_tool.config.get("api_key")
+                        tool_result = await get_weather(fn_args.get("city", ""), api_key=weather_api_key)
                         tool_result_str = json.dumps(tool_result)
                     elif fn_name == "web_search":
                         from app.services.web_search import web_search
@@ -293,7 +347,7 @@ RULES:
         # _parse_and_save_lead expects objects with .role and .content
         obj_messages = [_DictMsg(m.get("role"), m.get("content")) for m in user_messages]
         
-        reply_text = await _parse_and_save_lead(reply_text, agent, lead_fields, obj_messages, db)
+        reply_text = await _parse_and_save_lead(reply_text, agent, lead_fields, obj_messages, db, whatsapp_phone=whatsapp_phone)
         
         db.add(ChatMessage(session_id=session.id, role="assistant", content=reply_text))
         session.updated_at = datetime.utcnow()

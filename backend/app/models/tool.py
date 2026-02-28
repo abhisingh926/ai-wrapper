@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from sqlalchemy import Column, String, Boolean, DateTime, Integer
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from app.database import Base
 
 
@@ -19,6 +19,7 @@ class Tool(Base):
     enabled = Column(Boolean, default=True)                   # admin can disable
     badge = Column(String(50), default="stable")              # stable, beta, alpha, coming_soon
     sort_order = Column(Integer, default=0)                   # display ordering
+    config = Column(JSONB, default={})                         # tool-specific config (e.g. API keys)
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

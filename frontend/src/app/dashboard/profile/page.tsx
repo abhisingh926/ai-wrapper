@@ -8,8 +8,7 @@ export default function ProfilePage() {
     const { user, fetchUser } = useAuthStore();
     const [name, setName] = useState("");
     const [email, setEmail] = useState("");
-    const [currentPassword, setCurrentPassword] = useState("");
-    const [newPassword, setNewPassword] = useState("");
+
     const [saving, setSaving] = useState(false);
     const [message, setMessage] = useState({ type: "", text: "" });
     const [subscription, setSubscription] = useState<any>(null);
@@ -43,23 +42,7 @@ export default function ProfilePage() {
         setSaving(false);
     };
 
-    const handleChangePassword = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (newPassword.length < 8) {
-            setMessage({ type: "error", text: "Password must be at least 8 characters" });
-            return;
-        }
-        setSaving(true);
-        try {
-            await profileApi.changePassword({ current_password: currentPassword, new_password: newPassword });
-            setMessage({ type: "success", text: "Password changed successfully" });
-            setCurrentPassword("");
-            setNewPassword("");
-        } catch (err: any) {
-            setMessage({ type: "error", text: err.response?.data?.detail || "Password change failed" });
-        }
-        setSaving(false);
-    };
+
 
     return (
         <div className="max-w-2xl">
@@ -70,7 +53,7 @@ export default function ProfilePage() {
 
             {message.text && (
                 <div className={`mb-6 p-3 rounded-lg text-sm ${message.type === "success" ? "bg-green-500/10 border border-green-500/30 text-green-400"
-                        : "bg-red-500/10 border border-red-500/30 text-red-400"
+                    : "bg-red-500/10 border border-red-500/30 text-red-400"
                     }`}>
                     {message.text}
                 </div>
@@ -96,26 +79,7 @@ export default function ProfilePage() {
                 </form>
             </div>
 
-            {/* Change Password */}
-            <div className="glass rounded-2xl p-6 mb-6">
-                <h2 className="text-lg font-semibold text-white mb-4">Change Password</h2>
-                <form onSubmit={handleChangePassword} className="space-y-4">
-                    <div>
-                        <label className="block text-sm font-medium text-slate-300 mb-1.5">Current Password</label>
-                        <input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)}
-                            className="w-full px-4 py-3 rounded-xl bg-slate-800/50 border border-slate-600/50 text-white focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all text-sm" />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-slate-300 mb-1.5">New Password</label>
-                        <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)}
-                            className="w-full px-4 py-3 rounded-xl bg-slate-800/50 border border-slate-600/50 text-white focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all text-sm"
-                            placeholder="Min. 8 characters" />
-                    </div>
-                    <button type="submit" disabled={saving} className="btn-primary text-sm disabled:opacity-50">
-                        Change Password
-                    </button>
-                </form>
-            </div>
+
 
             {/* Subscription Badge */}
             {subscription && (

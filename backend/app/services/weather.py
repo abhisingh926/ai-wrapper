@@ -1,15 +1,53 @@
 """
-Weather Service — Fetches weather data from wttr.in (no API key needed).
+Weather Service — Supports OpenWeatherMap (with API key) or wttr.in (free fallback).
 """
 
 import httpx
 
 
-async def get_weather(city: str) -> dict:
-    """Fetch current weather for a given city using wttr.in."""
+async def get_weather(city: str, api_key: str | None = None) -> dict:
+    """Fetch current weather for a given city."""
+    if api_key:
+        return await _openweathermap(city, api_key)
+    return await _wttr(city)
+
+
+async def _openweathermap(city: str, api_key: str) -> dict:
+    """Fetch weather from OpenWeatherMap API."""
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            # wttr.in JSON API — no key required
+            resp = await client.get(
+                "https://api.openweathermap.org/data/2.5/weather",
+                params={"q": city, "appid": api_key, "units": "metric"},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+
+            main = data.get("main", {})
+            wind = data.get("wind", {})
+            weather_desc = data.get("weather", [{}])[0].get("description", "N/A")
+            country = data.get("sys", {}).get("country", "")
+
+            return {
+                "location": f"{data.get('name', city)}, {country}",
+                "temperature_c": str(round(main.get("temp", 0))),
+                "feels_like_c": str(round(main.get("feels_like", 0))),
+                "humidity": str(main.get("humidity", "N/A")),
+                "description": weather_desc.title(),
+                "wind_speed_kmh": str(round(wind.get("speed", 0) * 3.6)),
+                "wind_dir": str(wind.get("deg", "N/A")),
+                "visibility_km": str(round(data.get("visibility", 0) / 1000, 1)),
+                "pressure_mb": str(main.get("pressure", "N/A")),
+                "cloud_cover": str(data.get("clouds", {}).get("all", "N/A")),
+            }
+    except Exception as e:
+        return {"error": f"Could not fetch weather for '{city}': {str(e)}"}
+
+
+async def _wttr(city: str) -> dict:
+    """Fetch weather from wttr.in (no API key needed)."""
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.get(
                 f"https://wttr.in/{city}",
                 params={"format": "j1"},

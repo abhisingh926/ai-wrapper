@@ -7,7 +7,6 @@ import { useAuthStore } from "@/hooks/useAuth";
 
 const menuItems = [
     { label: "Dashboard", href: "/dashboard", icon: "🏠" },
-    { label: "Assistant", href: "/dashboard/assistant", icon: "💬" },
     { label: "Agents", href: "/dashboard/agents", icon: "🤖" },
     { label: "Billing", href: "/dashboard/billing", icon: "💳" },
     { label: "Profile", href: "/dashboard/profile", icon: "👤" },

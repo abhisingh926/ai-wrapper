@@ -157,10 +157,19 @@ export default function TestAgentChat({ agentId, agentName, botDisplayName, them
                     {messages.map((msg, i) => (
                         <div
                             key={i}
-                            className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+                            className={`flex items-end gap-2 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
                         >
+                            {/* Bot Avatar (left side) */}
+                            {msg.role !== "user" && (
+                                <div
+                                    className="w-7 h-7 rounded-full flex items-center justify-center text-xs shrink-0 border border-white/10 shadow-sm"
+                                    style={{ backgroundColor: themeColor }}
+                                >
+                                    🤖
+                                </div>
+                            )}
                             <div
-                                className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm shadow-sm ${msg.role === "user"
+                                className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm shadow-sm ${msg.role === "user"
                                     ? "text-white rounded-br-sm"
                                     : "bg-slate-800 text-slate-200 border border-slate-700/50 rounded-bl-sm"
                                     } whitespace-pre-wrap leading-relaxed`}
@@ -168,10 +177,22 @@ export default function TestAgentChat({ agentId, agentName, botDisplayName, them
                             >
                                 {msg.content}
                             </div>
+                            {/* User Avatar (right side) */}
+                            {msg.role === "user" && (
+                                <div className="w-7 h-7 rounded-full bg-indigo-500 flex items-center justify-center text-xs shrink-0 border border-white/10 shadow-sm">
+                                    👤
+                                </div>
+                            )}
                         </div>
                     ))}
                     {loading && (
-                        <div className="flex justify-start">
+                        <div className="flex items-end gap-2 justify-start">
+                            <div
+                                className="w-7 h-7 rounded-full flex items-center justify-center text-xs shrink-0 border border-white/10 shadow-sm"
+                                style={{ backgroundColor: themeColor }}
+                            >
+                                🤖
+                            </div>
                             <div className="bg-slate-800 text-slate-400 border border-slate-700/50 rounded-2xl rounded-bl-sm px-5 py-3.5 shadow-sm">
                                 <div className="flex gap-1.5">
                                     <div className="w-2 h-2 rounded-full bg-slate-500 animate-bounce" style={{ animationDelay: "0ms" }}></div>

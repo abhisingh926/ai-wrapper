@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, desc, func
+from sqlalchemy import select, update, desc, func, delete
 from datetime import datetime
 import json
 import re
@@ -364,13 +364,26 @@ async def delete_agent(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Delete an agent."""
+    """Delete an agent (admin only)."""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Only admins can delete agents")
     result = await db.execute(
-        select(Agent).where(Agent.id == agent_id, Agent.user_id == current_user.id)
+        select(Agent).where(Agent.id == agent_id)
     )
     agent = result.scalar_one_or_none()
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
+
+    # Delete related records first to avoid FK constraint errors
+    await db.execute(delete(AgentKnowledge).where(AgentKnowledge.agent_id == agent_id))
+    await db.execute(delete(AgentLead).where(AgentLead.agent_id == agent_id))
+    # Delete chat messages via their sessions, then delete sessions
+    sessions = await db.execute(select(ChatSession.id).where(ChatSession.agent_id == agent_id))
+    session_ids = [s[0] for s in sessions.fetchall()]
+    if session_ids:
+        await db.execute(delete(ChatMessage).where(ChatMessage.session_id.in_(session_ids)))
+    await db.execute(delete(ChatSession).where(ChatSession.agent_id == agent_id))
+
     await db.delete(agent)
     await db.commit()
     return {"detail": "Agent deleted"}
@@ -446,6 +459,10 @@ async def chat_with_agent(
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
 
+    # If agent is paused/draft, return empty reply silently
+    if agent.status != "live":
+        return {"reply": ""}
+
     # 2. Execute unified LLM Agent Chat Logic
     client_ip = request.client.host if request.client else "unknown"
     user_messages = [{"role": msg.role, "content": msg.content} for msg in req.messages]
@@ -464,6 +481,23 @@ async def chat_with_agent(
         raise HTTPException(status_code=500, detail=f"Failed to generate response: {str(e)}")
 
 
+@router.get("/{agent_id}/widget-status")
+async def get_widget_status(
+    agent_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Public endpoint: returns agent name and online/offline status for the widget."""
+    result = await db.execute(select(Agent).where(Agent.id == agent_id))
+    agent = result.scalar_one_or_none()
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    return {
+        "name": agent.name,
+        "status": agent.status,
+        "online": agent.status == "live",
+    }
+
+
 @router.post("/{agent_id}/widget-chat", response_model=ChatResponse)
 async def widget_chat_with_agent(
     agent_id: str,
@@ -479,6 +513,10 @@ async def widget_chat_with_agent(
     agent = result.scalar_one_or_none()
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
+
+    # If agent is paused/draft, return empty reply silently
+    if agent.status != "live":
+        return {"reply": ""}
 
     # 2. Check subscription of the agent owner
     owner_result = await db.execute(select(User).where(User.id == agent.user_id))

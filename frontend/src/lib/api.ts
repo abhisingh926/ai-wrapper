@@ -127,6 +127,10 @@ export const adminApi = {
     // AI Model Access Control
     getModels: () => api.get("/api/admin/models"),
     updateModels: (config: any) => api.put("/api/admin/models", config),
+
+    // Platform Settings
+    getSettings: () => api.get("/api/admin/settings"),
+    updateSettings: (data: any) => api.put("/api/admin/settings", data),
 };
 
 /* ──── Assistant API ──── */

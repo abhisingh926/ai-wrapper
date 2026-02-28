@@ -9,8 +9,219 @@ const AI_PROVIDERS = [
     { slug: "gemini", name: "Google Gemini", icon: "✨", desc: "Gemini Pro, Gemini Ultra", placeholder: "AIza..." },
 ];
 
+const ALL_FILE_TYPES = [
+    { ext: ".pdf", label: "PDF", icon: "📄" },
+    { ext: ".txt", label: "Text", icon: "📝" },
+    { ext: ".csv", label: "CSV", icon: "📊" },
+    { ext: ".docx", label: "Word", icon: "📋" },
+    { ext: ".md", label: "Markdown", icon: "📑" },
+];
+
+const PLANS = ["free", "starter", "growth", "business"];
+
+function SettingsTab() {
+    const [maxPages, setMaxPages] = useState(10);
+    const [maxContentKb, setMaxContentKb] = useState(200);
+    const [allowedTypes, setAllowedTypes] = useState<string[]>([".pdf", ".txt"]);
+    const [maxUploadMb, setMaxUploadMb] = useState(10);
+    const [scrapingByPlan, setScrapingByPlan] = useState<Record<string, boolean>>({ free: false, starter: true, growth: true, business: true });
+    const [saving, setSaving] = useState(false);
+    const [loaded, setLoaded] = useState(false);
+    const [msg, setMsg] = useState("");
+
+    useEffect(() => {
+        adminApi.getSettings().then((res) => {
+            const d = res.data;
+            setMaxPages(d.max_scrape_pages || 10);
+            setMaxContentKb(d.max_content_size_kb || 200);
+            setAllowedTypes(d.allowed_file_types || [".pdf", ".txt"]);
+            setMaxUploadMb(d.max_upload_size_mb || 10);
+            setScrapingByPlan(d.url_scraping_by_plan || { free: false, starter: true, growth: true, business: true });
+            setLoaded(true);
+        }).catch(() => setLoaded(true));
+    }, []);
+
+    const toggleFileType = (ext: string) => {
+        setAllowedTypes((prev) =>
+            prev.includes(ext) ? prev.filter((t) => t !== ext) : [...prev, ext]
+        );
+    };
+
+    const togglePlan = (plan: string) => {
+        setScrapingByPlan((prev) => ({ ...prev, [plan]: !prev[plan] }));
+    };
+
+    const handleSave = async () => {
+        setSaving(true);
+        setMsg("");
+        try {
+            await adminApi.updateSettings({
+                max_scrape_pages: maxPages,
+                max_content_size_kb: maxContentKb,
+                allowed_file_types: allowedTypes,
+                max_upload_size_mb: maxUploadMb,
+                url_scraping_by_plan: scrapingByPlan,
+            });
+            setMsg("Settings saved!");
+            setTimeout(() => setMsg(""), 3000);
+        } catch (err: any) {
+            setMsg("Error: " + (err.response?.data?.detail || "Failed to save"));
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    if (!loaded) return <div className="text-slate-400 py-12 text-center">Loading settings...</div>;
+
+    return (
+        <div className="space-y-6">
+            {/* ── Section 1: URL Scraping ── */}
+            <div className="bg-slate-800/50 border border-slate-700/60 rounded-2xl p-6">
+                <h3 className="text-lg font-semibold text-white mb-1">🌐 URL Scraping</h3>
+                <p className="text-sm text-slate-400 mb-6">Control how the scraper crawls websites when users add URLs to their knowledge base.</p>
+
+                <div className="grid md:grid-cols-2 gap-6">
+                    {/* Max Pages */}
+                    <div>
+                        <div className="flex justify-between items-center mb-2">
+                            <label className="text-sm font-medium text-slate-300">Max Pages to Scrape</label>
+                            <div className="flex items-center gap-2">
+                                <input type="number" min={1} max={500} value={maxPages}
+                                    onChange={(e) => setMaxPages(Math.min(500, Math.max(1, parseInt(e.target.value) || 1)))}
+                                    className="w-20 bg-slate-900 border border-slate-600 rounded-lg px-3 py-1.5 text-sm text-white text-center focus:outline-none focus:border-indigo-500"
+                                />
+                                <span className="text-xs text-slate-500">pages</span>
+                            </div>
+                        </div>
+                        <input type="range" min={1} max={100} value={Math.min(maxPages, 100)}
+                            onChange={(e) => setMaxPages(parseInt(e.target.value))}
+                            className="w-full accent-indigo-500"
+                        />
+                        <div className="flex justify-between text-xs text-slate-500 mt-1">
+                            <span>1</span><span>50</span><span>100+</span>
+                        </div>
+                    </div>
+
+                    {/* Max Content Size */}
+                    <div>
+                        <div className="flex justify-between items-center mb-2">
+                            <label className="text-sm font-medium text-slate-300">Max Content Size</label>
+                            <div className="flex items-center gap-2">
+                                <input type="number" min={50} max={1000} value={maxContentKb}
+                                    onChange={(e) => setMaxContentKb(Math.min(1000, Math.max(50, parseInt(e.target.value) || 50)))}
+                                    className="w-20 bg-slate-900 border border-slate-600 rounded-lg px-3 py-1.5 text-sm text-white text-center focus:outline-none focus:border-indigo-500"
+                                />
+                                <span className="text-xs text-slate-500">KB</span>
+                            </div>
+                        </div>
+                        <input type="range" min={50} max={500} step={50}
+                            value={Math.min(maxContentKb, 500)}
+                            onChange={(e) => setMaxContentKb(parseInt(e.target.value))}
+                            className="w-full accent-indigo-500"
+                        />
+                        <div className="flex justify-between text-xs text-slate-500 mt-1">
+                            <span>50 KB</span><span>250 KB</span><span>500 KB</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* ── Section 2: File Uploads ── */}
+            <div className="bg-slate-800/50 border border-slate-700/60 rounded-2xl p-6">
+                <h3 className="text-lg font-semibold text-white mb-1">📁 File Uploads</h3>
+                <p className="text-sm text-slate-400 mb-6">Configure which file types users can upload and the maximum file size.</p>
+
+                <div className="mb-6">
+                    <label className="text-sm font-medium text-slate-300 mb-3 block">Allowed File Types</label>
+                    <div className="flex flex-wrap gap-3">
+                        {ALL_FILE_TYPES.map((ft) => (
+                            <button
+                                key={ft.ext}
+                                onClick={() => toggleFileType(ft.ext)}
+                                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all border ${allowedTypes.includes(ft.ext)
+                                    ? "bg-indigo-500/20 text-indigo-300 border-indigo-500/40"
+                                    : "bg-slate-900/50 text-slate-500 border-slate-700 hover:border-slate-600"
+                                    }`}
+                            >
+                                <span>{ft.icon}</span>
+                                <span>{ft.label}</span>
+                                <span className="text-xs opacity-60">{ft.ext}</span>
+                                {allowedTypes.includes(ft.ext) && <span className="text-emerald-400">✓</span>}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                <div>
+                    <div className="flex justify-between items-center mb-2">
+                        <label className="text-sm font-medium text-slate-300">Max Upload Size</label>
+                        <div className="flex items-center gap-2">
+                            <input type="number" min={1} max={100} value={maxUploadMb}
+                                onChange={(e) => setMaxUploadMb(Math.min(100, Math.max(1, parseInt(e.target.value) || 1)))}
+                                className="w-20 bg-slate-900 border border-slate-600 rounded-lg px-3 py-1.5 text-sm text-white text-center focus:outline-none focus:border-indigo-500"
+                            />
+                            <span className="text-xs text-slate-500">MB</span>
+                        </div>
+                    </div>
+                    <input type="range" min={1} max={50} value={Math.min(maxUploadMb, 50)}
+                        onChange={(e) => setMaxUploadMb(parseInt(e.target.value))}
+                        className="w-full accent-indigo-500"
+                    />
+                    <div className="flex justify-between text-xs text-slate-500 mt-1">
+                        <span>1 MB</span><span>25 MB</span><span>50 MB</span>
+                    </div>
+                </div>
+            </div>
+
+            {/* ── Section 3: URL Scraping by Plan ── */}
+            <div className="bg-slate-800/50 border border-slate-700/60 rounded-2xl p-6">
+                <h3 className="text-lg font-semibold text-white mb-1">🔐 URL Scraping Access by Plan</h3>
+                <p className="text-sm text-slate-400 mb-6">Control which subscription plans can use URL scraping in their knowledge base.</p>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {PLANS.map((plan) => (
+                        <button
+                            key={plan}
+                            onClick={() => togglePlan(plan)}
+                            className={`relative flex flex-col items-center gap-2 p-4 rounded-xl border transition-all ${scrapingByPlan[plan]
+                                ? "bg-emerald-500/10 border-emerald-500/40 text-emerald-300"
+                                : "bg-slate-900/50 border-slate-700 text-slate-500 hover:border-slate-600"
+                                }`}
+                        >
+                            <span className="text-2xl">{scrapingByPlan[plan] ? "✅" : "🚫"}</span>
+                            <span className="text-sm font-medium capitalize">{plan}</span>
+                            <span className="text-xs opacity-70">
+                                {scrapingByPlan[plan] ? "Enabled" : "Disabled"}
+                            </span>
+                        </button>
+                    ))}
+                </div>
+                <p className="text-xs text-slate-500 mt-3">
+                    💡 Users on disabled plans will see an upgrade prompt when they try to scrape a URL.
+                </p>
+            </div>
+
+            {/* ── Save Button ── */}
+            <div className="flex items-center gap-3">
+                <button
+                    onClick={handleSave}
+                    disabled={saving}
+                    className="px-6 py-2.5 bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-medium rounded-xl transition-colors disabled:opacity-50"
+                >
+                    {saving ? "Saving..." : "💾 Save All Settings"}
+                </button>
+                {msg && (
+                    <span className={`text-sm ${msg.startsWith("Error") ? "text-red-400" : "text-emerald-400"}`}>
+                        {msg}
+                    </span>
+                )}
+            </div>
+        </div>
+    );
+}
+
 export default function AdminPage() {
-    const [tab, setTab] = useState<"analytics" | "users" | "api-keys" | "usage" | "pricing" | "tools" | "channels" | "models">("analytics");
+    const [tab, setTab] = useState<"analytics" | "users" | "api-keys" | "usage" | "pricing" | "tools" | "channels" | "models" | "settings">("analytics");
     const [analytics, setAnalytics] = useState<any>(null);
     const [users, setUsers] = useState<any[]>([]);
     const [search, setSearch] = useState("");
@@ -34,6 +245,12 @@ export default function AdminPage() {
 
     // Tools state
     const [adminTools, setAdminTools] = useState<any[]>([]);
+    const [showKBConfig, setShowKBConfig] = useState(false);
+    const [showWeatherConfig, setShowWeatherConfig] = useState(false);
+    const [weatherApiKey, setWeatherApiKey] = useState("");
+    const [weatherConfigSaving, setWeatherConfigSaving] = useState(false);
+    const [weatherConfigMsg, setWeatherConfigMsg] = useState<{ type: string; text: string } | null>(null);
+    const [weatherToolId, setWeatherToolId] = useState<string | null>(null);
     const [toolsLoading, setToolsLoading] = useState(false);
     const [showAddTool, setShowAddTool] = useState(false);
     const [newTool, setNewTool] = useState({ slug: "", name: "", icon: "🔧", description: "", category: "general", badge: "stable" });
@@ -343,6 +560,7 @@ export default function AdminPage() {
         { key: "pricing", label: "💰 Pricing" },
         { key: "usage", label: "📈 Usage" },
         { key: "users", label: "👥 Users" },
+        { key: "settings", label: "⚙️ Settings" },
     ];
 
     const connectedKeyMap = new Map(globalKeys.map((k: any) => [k.slug, k]));
@@ -883,7 +1101,23 @@ export default function AdminPage() {
                                             <span className="text-xs text-slate-500">Status</span>
 
                                             <div className="flex items-center gap-4">
-                                                <button className="text-[11px] text-slate-400 hover:text-white transition-colors">Configure</button>
+                                                <button
+                                                    onClick={() => {
+                                                        if (t.name === "Knowledge Base") setShowKBConfig(true);
+                                                        else if (t.slug === "weather") {
+                                                            setWeatherToolId(t.id);
+                                                            setWeatherApiKey(t.config?.api_key || "");
+                                                            setWeatherConfigMsg(null);
+                                                            setShowWeatherConfig(true);
+                                                        }
+                                                    }}
+                                                    className={`text-[11px] transition-colors ${(t.name === "Knowledge Base" || t.slug === "weather")
+                                                        ? "text-indigo-400 hover:text-indigo-300 font-medium"
+                                                        : "text-slate-400 hover:text-white"
+                                                        }`}
+                                                >
+                                                    Configure
+                                                </button>
                                                 <button className="text-[11px] text-slate-400 hover:text-white transition-colors">View Logs</button>
 
                                                 {/* Toggle Switch */}
@@ -905,6 +1139,136 @@ export default function AdminPage() {
                         </div>
                     )}
                 </div>
+            )}
+
+            {/* ═══ Knowledge Base Config Modal ═══ */}
+            {showKBConfig && (
+                <>
+                    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40" onClick={() => setShowKBConfig(false)} />
+                    <div className="fixed inset-y-0 right-0 w-full md:w-[600px] bg-[#0f172a] border-l border-slate-700/50 shadow-2xl z-50 flex flex-col overflow-y-auto">
+                        <div className="flex justify-between items-center px-6 py-4 border-b border-slate-800 sticky top-0 bg-[#0f172a] z-10">
+                            <div>
+                                <h2 className="text-lg font-bold text-white">📚 Knowledge Base Configuration</h2>
+                                <p className="text-xs text-slate-400 mt-0.5">URL scraping, file uploads, and plan access</p>
+                            </div>
+                            <button
+                                onClick={() => setShowKBConfig(false)}
+                                className="text-slate-400 hover:text-white p-2 rounded-lg hover:bg-slate-800 transition-colors"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                        <div className="p-6">
+                            <SettingsTab />
+                        </div>
+                    </div>
+                </>
+            )}
+            {/* ═══ Weather Config Modal ═══ */}
+            {showWeatherConfig && (
+                <>
+                    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40" onClick={() => setShowWeatherConfig(false)} />
+                    <div className="fixed inset-y-0 right-0 w-full md:w-[500px] bg-[#0f172a] border-l border-slate-700/50 shadow-2xl z-50 flex flex-col overflow-y-auto">
+                        <div className="flex justify-between items-center px-6 py-4 border-b border-slate-800 sticky top-0 bg-[#0f172a] z-10">
+                            <div>
+                                <h2 className="text-lg font-bold text-white">🌤️ Weather API Configuration</h2>
+                                <p className="text-xs text-slate-400 mt-0.5">Connect an OpenWeatherMap API key for enhanced weather data</p>
+                            </div>
+                            <button
+                                onClick={() => setShowWeatherConfig(false)}
+                                className="text-slate-400 hover:text-white p-2 rounded-lg hover:bg-slate-800 transition-colors"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                        <div className="p-6 flex flex-col gap-6">
+                            {/* Status */}
+                            <div className={`flex items-center gap-3 p-4 rounded-xl border ${weatherApiKey
+                                    ? "bg-green-500/5 border-green-500/20"
+                                    : "bg-slate-800/50 border-slate-700/50"
+                                }`}>
+                                <span className={`w-2.5 h-2.5 rounded-full ${weatherApiKey ? "bg-green-400 animate-pulse" : "bg-slate-500"}`} />
+                                <div>
+                                    <p className="text-sm font-medium text-white">
+                                        {weatherApiKey ? "API Key Configured" : "No API Key Set"}
+                                    </p>
+                                    <p className="text-xs text-slate-400">
+                                        {weatherApiKey ? "Using OpenWeatherMap for weather data" : "Using free wttr.in fallback (limited)"}
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* API Key Input */}
+                            <div>
+                                <label className="text-sm font-medium text-white mb-2 block">OpenWeatherMap API Key</label>
+                                <input
+                                    type="password"
+                                    value={weatherApiKey}
+                                    onChange={(e) => setWeatherApiKey(e.target.value)}
+                                    placeholder="Enter your OpenWeatherMap API key..."
+                                    className="w-full px-4 py-3 rounded-xl bg-slate-800/50 border border-slate-600/50 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all font-mono text-sm"
+                                />
+                            </div>
+
+                            {/* Actions */}
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={async () => {
+                                        if (!weatherToolId) return;
+                                        setWeatherConfigSaving(true);
+                                        setWeatherConfigMsg(null);
+                                        try {
+                                            await adminApi.updateTool(weatherToolId, {
+                                                config: { api_key: weatherApiKey }
+                                            });
+                                            setWeatherConfigMsg({ type: "success", text: weatherApiKey ? "✅ API key saved successfully!" : "✅ API key cleared. Using wttr.in fallback." });
+                                            loadAdminTools();
+                                        } catch {
+                                            setWeatherConfigMsg({ type: "error", text: "Failed to save. Please try again." });
+                                        }
+                                        setWeatherConfigSaving(false);
+                                    }}
+                                    disabled={weatherConfigSaving}
+                                    className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-indigo-500 text-white hover:bg-indigo-600 transition-all disabled:opacity-50"
+                                >
+                                    {weatherConfigSaving ? "Saving..." : "Save API Key"}
+                                </button>
+                                {weatherApiKey && (
+                                    <button
+                                        onClick={() => setWeatherApiKey("")}
+                                        className="px-4 py-2.5 rounded-xl text-sm font-medium text-red-400 border border-red-500/20 hover:bg-red-500/10 transition-all"
+                                    >
+                                        Clear
+                                    </button>
+                                )}
+                            </div>
+
+                            {/* Status message */}
+                            {weatherConfigMsg && (
+                                <p className={`text-xs text-center ${weatherConfigMsg.type === "success" ? "text-green-400" : "text-red-400"}`}>
+                                    {weatherConfigMsg.text}
+                                </p>
+                            )}
+
+                            {/* Info box */}
+                            <div className="p-4 rounded-xl bg-indigo-500/5 border border-indigo-500/20">
+                                <div className="flex items-start gap-3">
+                                    <span className="text-lg mt-0.5">💡</span>
+                                    <div>
+                                        <p className="text-sm font-medium text-indigo-300">How to get an API key</p>
+                                        <ol className="text-xs text-slate-400 mt-2 space-y-1.5 list-decimal list-inside">
+                                            <li>Go to <span className="text-indigo-400">openweathermap.org</span></li>
+                                            <li>Create a free account</li>
+                                            <li>Navigate to <strong>API Keys</strong> in your profile</li>
+                                            <li>Copy the default key or generate a new one</li>
+                                        </ol>
+                                        <p className="text-xs text-slate-500 mt-2">Free tier: 60 calls/min, 1,000,000 calls/month</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </>
             )}
             {/* ═══ Channels Tab ═══ */}
             {tab === "channels" && (
@@ -1194,6 +1558,11 @@ export default function AdminPage() {
                         <div className="text-center py-12 text-slate-500">No model configuration found</div>
                     )}
                 </div>
+            )}
+
+            {/* ═══ Settings Tab ═══ */}
+            {tab === "settings" && (
+                <SettingsTab />
             )}
         </div>
     );
