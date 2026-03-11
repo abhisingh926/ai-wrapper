@@ -251,6 +251,12 @@ export default function AdminPage() {
     const [weatherConfigSaving, setWeatherConfigSaving] = useState(false);
     const [weatherConfigMsg, setWeatherConfigMsg] = useState<{ type: string; text: string } | null>(null);
     const [weatherToolId, setWeatherToolId] = useState<string | null>(null);
+    const [showCalendarConfig, setShowCalendarConfig] = useState(false);
+    const [calendarOAuthClientId, setCalendarOAuthClientId] = useState("");
+    const [calendarOAuthSecret, setCalendarOAuthSecret] = useState("");
+    const [calendarConfigSaving, setCalendarConfigSaving] = useState(false);
+    const [calendarConfigMsg, setCalendarConfigMsg] = useState<{ type: string; text: string } | null>(null);
+    const [calendarToolId, setCalendarToolId] = useState<string | null>(null);
     const [toolsLoading, setToolsLoading] = useState(false);
     const [showAddTool, setShowAddTool] = useState(false);
     const [newTool, setNewTool] = useState({ slug: "", name: "", icon: "🔧", description: "", category: "general", badge: "stable" });
@@ -1109,9 +1115,15 @@ export default function AdminPage() {
                                                             setWeatherApiKey(t.config?.api_key || "");
                                                             setWeatherConfigMsg(null);
                                                             setShowWeatherConfig(true);
+                                                        } else if (t.slug === "google_calendar") {
+                                                            setCalendarToolId(t.id);
+                                                            setCalendarOAuthClientId(t.config?.oauth_client_id || "");
+                                                            setCalendarOAuthSecret(t.config?.oauth_client_secret || "");
+                                                            setCalendarConfigMsg(null);
+                                                            setShowCalendarConfig(true);
                                                         }
                                                     }}
-                                                    className={`text-[11px] transition-colors ${(t.name === "Knowledge Base" || t.slug === "weather")
+                                                    className={`text-[11px] transition-colors ${(t.name === "Knowledge Base" || t.slug === "weather" || t.slug === "google_calendar")
                                                         ? "text-indigo-400 hover:text-indigo-300 font-medium"
                                                         : "text-slate-400 hover:text-white"
                                                         }`}
@@ -1184,8 +1196,8 @@ export default function AdminPage() {
                         <div className="p-6 flex flex-col gap-6">
                             {/* Status */}
                             <div className={`flex items-center gap-3 p-4 rounded-xl border ${weatherApiKey
-                                    ? "bg-green-500/5 border-green-500/20"
-                                    : "bg-slate-800/50 border-slate-700/50"
+                                ? "bg-green-500/5 border-green-500/20"
+                                : "bg-slate-800/50 border-slate-700/50"
                                 }`}>
                                 <span className={`w-2.5 h-2.5 rounded-full ${weatherApiKey ? "bg-green-400 animate-pulse" : "bg-slate-500"}`} />
                                 <div>
@@ -1263,6 +1275,86 @@ export default function AdminPage() {
                                             <li>Copy the default key or generate a new one</li>
                                         </ol>
                                         <p className="text-xs text-slate-500 mt-2">Free tier: 60 calls/min, 1,000,000 calls/month</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </>
+            )}
+            {/* ═══ Google Calendar OAuth Config Modal ═══ */}
+            {showCalendarConfig && (
+                <>
+                    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40" onClick={() => setShowCalendarConfig(false)} />
+                    <div className="fixed inset-y-0 right-0 w-full md:w-[500px] bg-[#0f172a] border-l border-slate-700/50 shadow-2xl z-50 flex flex-col overflow-y-auto">
+                        <div className="flex justify-between items-center px-6 py-4 border-b border-slate-800 sticky top-0 bg-[#0f172a] z-10">
+                            <div>
+                                <h2 className="text-lg font-bold text-white">📅 Google Calendar — OAuth Setup</h2>
+                                <p className="text-xs text-slate-400 mt-0.5">Set up OAuth credentials so users can connect their own calendars</p>
+                            </div>
+                            <button onClick={() => setShowCalendarConfig(false)} className="text-slate-400 hover:text-white p-2 rounded-lg hover:bg-slate-800 transition-colors">✕</button>
+                        </div>
+                        <div className="p-6 flex flex-col gap-5">
+                            {/* Status */}
+                            <div className={`flex items-center gap-3 p-4 rounded-xl border ${calendarOAuthClientId && calendarOAuthSecret ? "bg-green-500/5 border-green-500/20" : "bg-slate-800/50 border-slate-700/50"}`}>
+                                <span className={`w-2.5 h-2.5 rounded-full ${calendarOAuthClientId && calendarOAuthSecret ? "bg-green-400 animate-pulse" : "bg-slate-500"}`} />
+                                <div>
+                                    <p className="text-sm font-medium text-white">{calendarOAuthClientId && calendarOAuthSecret ? "OAuth Credentials Set" : "Not Configured"}</p>
+                                    <p className="text-xs text-slate-400">{calendarOAuthClientId && calendarOAuthSecret ? "Users can connect their Google Calendar in agent settings" : "Add OAuth credentials to enable calendar for users"}</p>
+                                </div>
+                            </div>
+
+                            {/* Client ID */}
+                            <div>
+                                <label className="text-sm font-medium text-white mb-2 block">OAuth Client ID</label>
+                                <input type="text" value={calendarOAuthClientId} onChange={(e) => setCalendarOAuthClientId(e.target.value)} placeholder="xxxx.apps.googleusercontent.com" className="w-full px-4 py-3 rounded-xl bg-slate-800/50 border border-slate-600/50 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all font-mono text-xs" />
+                            </div>
+
+                            {/* Client Secret */}
+                            <div>
+                                <label className="text-sm font-medium text-white mb-2 block">OAuth Client Secret</label>
+                                <input type="password" value={calendarOAuthSecret} onChange={(e) => setCalendarOAuthSecret(e.target.value)} placeholder="GOCSPX-..." className="w-full px-4 py-3 rounded-xl bg-slate-800/50 border border-slate-600/50 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all font-mono text-xs" />
+                            </div>
+
+                            {/* Actions */}
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={async () => {
+                                        if (!calendarToolId) return;
+                                        setCalendarConfigSaving(true);
+                                        setCalendarConfigMsg(null);
+                                        try {
+                                            await adminApi.updateTool(calendarToolId, { config: { oauth_client_id: calendarOAuthClientId, oauth_client_secret: calendarOAuthSecret } });
+                                            setCalendarConfigMsg({ type: "success", text: "✅ OAuth credentials saved! Users can now connect their calendar." });
+                                            loadAdminTools();
+                                        } catch { setCalendarConfigMsg({ type: "error", text: "Failed to save. Please try again." }); }
+                                        setCalendarConfigSaving(false);
+                                    }}
+                                    disabled={calendarConfigSaving}
+                                    className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-indigo-500 text-white hover:bg-indigo-600 transition-all disabled:opacity-50"
+                                >{calendarConfigSaving ? "Saving..." : "Save Credentials"}</button>
+                                {(calendarOAuthClientId || calendarOAuthSecret) && (
+                                    <button onClick={() => { setCalendarOAuthClientId(""); setCalendarOAuthSecret(""); }} className="px-4 py-2.5 rounded-xl text-sm font-medium text-red-400 border border-red-500/20 hover:bg-red-500/10 transition-all">Clear</button>
+                                )}
+                            </div>
+
+                            {calendarConfigMsg && (<p className={`text-xs text-center ${calendarConfigMsg.type === "success" ? "text-green-400" : "text-red-400"}`}>{calendarConfigMsg.text}</p>)}
+
+                            {/* Setup Instructions */}
+                            <div className="p-4 rounded-xl bg-indigo-500/5 border border-indigo-500/20">
+                                <div className="flex items-start gap-3">
+                                    <span className="text-lg mt-0.5">💡</span>
+                                    <div>
+                                        <p className="text-sm font-medium text-indigo-300">How to get OAuth credentials</p>
+                                        <ol className="text-xs text-slate-400 mt-2 space-y-1.5 list-decimal list-inside">
+                                            <li>Go to <span className="text-indigo-400">console.cloud.google.com</span></li>
+                                            <li>Create a project & enable <strong>Google Calendar API</strong></li>
+                                            <li>Go to <strong>APIs & Services → Credentials</strong></li>
+                                            <li>Create an <strong>OAuth 2.0 Client ID</strong> (Web application)</li>
+                                            <li>Add redirect URI: <code className="text-indigo-400 bg-slate-800 px-1.5 py-0.5 rounded">{typeof window !== 'undefined' ? window.location.origin : ''}/api/google-calendar/callback</code></li>
+                                            <li>Copy the <strong>Client ID</strong> and <strong>Client Secret</strong></li>
+                                        </ol>
+                                        <p className="text-xs text-slate-500 mt-2">Users will connect their own calendar via OAuth in agent settings.</p>
                                     </div>
                                 </div>
                             </div>

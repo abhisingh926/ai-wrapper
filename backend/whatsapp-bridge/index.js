@@ -6,6 +6,14 @@ const QRCode = require('qrcode');
 const path = require('path');
 const fs = require('fs');
 
+// ─── CRASH PROTECTION: Prevent Baileys from killing the process ──────────────
+process.on('uncaughtException', (err) => {
+    console.error('⚠️  Uncaught Exception (kept alive):', err.message);
+});
+process.on('unhandledRejection', (reason) => {
+    console.error('⚠️  Unhandled Rejection (kept alive):', reason?.message || reason);
+});
+
 const app = express();
 const PORT = 3001;
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
@@ -183,10 +191,31 @@ async function createBaileysConnection(agentId, sendEvent = null, onSSEClose = n
     return sock;
 }
 
+// ─── Clean stale auth dirs that may cause crashes ───────────────────────────
+function cleanStaleAuth() {
+    const authRoot = path.join(__dirname, 'auth');
+    if (!fs.existsSync(authRoot)) return;
+
+    const dirs = fs.readdirSync(authRoot);
+    for (const d of dirs) {
+        const dirPath = path.join(authRoot, d);
+        if (!fs.statSync(dirPath).isDirectory()) continue;
+        const credsPath = path.join(dirPath, 'creds.json');
+        if (!fs.existsSync(credsPath)) {
+            // No creds = incomplete pairing, remove
+            console.log(`🧹 Removing incomplete auth dir: ${d}`);
+            fs.rmSync(dirPath, { recursive: true, force: true });
+        }
+    }
+}
+
 // ─── Auto-reconnect previously paired agents on startup ─────────────────────
 async function bootLinkedAgents() {
     const authRoot = path.join(__dirname, 'auth');
     if (!fs.existsSync(authRoot)) return;
+
+    // Clean up stale/broken auth first
+    cleanStaleAuth();
 
     const agentDirs = fs.readdirSync(authRoot).filter(d =>
         fs.statSync(path.join(authRoot, d)).isDirectory() &&
@@ -204,8 +233,11 @@ async function bootLinkedAgents() {
         try {
             await createBaileysConnection(agentId);
             console.log(`   ✅ ${agentId} — reconnection initiated`);
+            // Delay between connections to avoid rate limiting
+            await new Promise(r => setTimeout(r, 2000));
         } catch (err) {
             console.error(`   ❌ ${agentId} — failed to reconnect:`, err.message);
+            // Don't crash — continue with next agent
         }
     }
 }

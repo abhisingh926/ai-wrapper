@@ -5,7 +5,9 @@ Weather Service — Supports OpenWeatherMap (with API key) or wttr.in (free fall
 import httpx
 
 
-async def get_weather(city: str, api_key: str | None = None) -> dict:
+from typing import Optional
+
+async def get_weather(city: str, api_key: Optional[str] = None) -> dict:
     """Fetch current weather for a given city."""
     if api_key:
         return await _openweathermap(city, api_key)

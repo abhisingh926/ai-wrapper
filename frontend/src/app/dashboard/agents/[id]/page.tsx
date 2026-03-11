@@ -1050,6 +1050,62 @@ export default function AgentViewPage() {
                             }
 
                             if (agent.platform === "web") {
+                                const cssBlock = [
+                                    "#aiw-chat-bubble { position:fixed; bottom:24px; right:24px; width:60px; height:60px; border-radius:50%; background:" + themeColor + "; cursor:pointer; box-shadow:0 4px 24px rgba(0,0,0,.3); display:flex; align-items:center; justify-content:center; z-index:99999; transition:transform .2s; border:none; }",
+                                    "#aiw-chat-bubble:hover { transform:scale(1.1); }",
+                                    "#aiw-chat-bubble svg { width:28px; height:28px; fill:#fff; }",
+                                    "#aiw-chat-container { position:fixed; bottom:96px; right:24px; width:400px; max-height:600px; background:#0f172a; border:1px solid rgba(100,116,139,.3); border-radius:16px; z-index:99999; display:none; flex-direction:column; overflow:hidden; box-shadow:0 20px 60px rgba(0,0,0,.5); font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; }",
+                                    "#aiw-chat-container.open { display:flex; }",
+                                    "#aiw-header { padding:16px 20px; background:" + themeColor + "; display:flex; align-items:center; gap:12px; }",
+                                    "#aiw-header-title { color:#fff; font-weight:600; font-size:15px; }",
+                                    "#aiw-header-sub { color:rgba(255,255,255,.7); font-size:12px; }",
+                                    "#aiw-messages { flex:1; overflow-y:auto; padding:16px; min-height:300px; max-height:420px; }",
+                                    ".aiw-msg { margin-bottom:12px; max-width:85%; padding:10px 14px; border-radius:12px; font-size:14px; line-height:1.5; word-wrap:break-word; }",
+                                    ".aiw-msg.user { background:" + themeColor + "; color:#fff; margin-left:auto; border-bottom-right-radius:4px; }",
+                                    ".aiw-msg.bot { background:#1e293b; color:#e2e8f0; border-bottom-left-radius:4px; }",
+                                    "#aiw-input-area { padding:12px 16px; border-top:1px solid rgba(100,116,139,.2); display:flex; gap:8px; }",
+                                    "#aiw-input { flex:1; background:#1e293b; border:1px solid rgba(100,116,139,.3); border-radius:10px; padding:10px 14px; color:#fff; font-size:14px; outline:none; }",
+                                    "#aiw-input::placeholder { color:#64748b; }",
+                                    "#aiw-send { background:" + themeColor + "; border:none; border-radius:10px; padding:10px 16px; color:#fff; cursor:pointer; font-size:14px; font-weight:500; }",
+                                    "#aiw-send:hover { opacity:0.9; }",
+                                    ".aiw-msg.bot.aiw-typing { display:flex; gap:4px; padding:10px 14px; }",
+                                    ".aiw-msg.bot.aiw-typing span { width:8px; height:8px; background:#64748b; border-radius:50%; animation:aiw-bounce .6s infinite alternate; }",
+                                    ".aiw-msg.bot.aiw-typing span:nth-child(2) { animation-delay:.2s; }",
+                                    ".aiw-msg.bot.aiw-typing span:nth-child(3) { animation-delay:.4s; }",
+                                    "@keyframes aiw-bounce { to { opacity:.3; transform:translateY(-4px); } }"
+                                ].join("");
+                                const brandingHtml = !removeBranding ? '<div style="text-align:center; padding: 8px; font-size:11px; color:#64748b; background:#0f172a; border-top:1px solid rgba(100,116,139,.2)">Powered by <strong>AIWrapper</strong></div>' : '';
+                                const displayName = botDisplayName || agent.name;
+                                const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+                                const code = "<!-- AIWrapper Chat Widget -->\n<script>\n(function() {\n" +
+                                    '  var AGENT_ID = "' + agent.id + '";\n' +
+                                    '  var API_URL = "' + apiBase + '/api/agents/" + AGENT_ID + "/widget-chat";\n' +
+                                    '  var STATUS_URL = "' + apiBase + '/api/agents/" + AGENT_ID + "/widget-status";\n\n' +
+                                    "  // Create styles\n  var style = document.createElement('style');\n" +
+                                    "  style.textContent = '" + cssBlock.replace(/'/g, "\\'") + "';\n" +
+                                    "  document.head.appendChild(style);\n\n" +
+                                    "  function init() {\n" +
+                                    "    var bubble = document.createElement('button');\n" +
+                                    "    bubble.id = 'aiw-chat-bubble';\n" +
+                                    '    bubble.innerHTML = \'<svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>\';\n' +
+                                    "    document.body.appendChild(bubble);\n\n" +
+                                    "    var container = document.createElement('div');\n" +
+                                    "    container.id = 'aiw-chat-container';\n" +
+                                    '    container.innerHTML = \'<div id="aiw-header"><div><div id="aiw-header-title">' + displayName + '</div><div id="aiw-header-sub">AI Assistant \\u2022 <span id="aiw-status-dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#22c55e;margin:0 4px;vertical-align:middle;"></span><span id="aiw-status-text">Checking...</span></div></div></div><div id="aiw-messages"></div><div id="aiw-input-area"><input id="aiw-input" placeholder="Type a message..." /><button id="aiw-send">Send</button></div>' + brandingHtml + "';\n" +
+                                    "    document.body.appendChild(container);\n\n" +
+                                    "    var messages = [];\n    var isOnline = true;\n" +
+                                    "    bubble.onclick = function() { container.classList.toggle('open'); };\n\n" +
+                                    "    fetch(STATUS_URL)\n      .then(function(r) { return r.json(); })\n      .then(function(data) {\n" +
+                                    "        isOnline = data.online;\n        var dot = document.getElementById('aiw-status-dot');\n        var statusText = document.getElementById('aiw-status-text');\n" +
+                                    "        if (isOnline) { dot.style.background = '#22c55e'; statusText.textContent = 'Online'; }\n" +
+                                    "        else { dot.style.background = '#ef4444'; statusText.textContent = 'Offline'; document.getElementById('aiw-input').disabled = true; document.getElementById('aiw-input').placeholder = 'Agent is offline'; document.getElementById('aiw-send').style.display = 'none'; var offlineMsg = document.createElement('div'); offlineMsg.className = 'aiw-msg bot'; offlineMsg.textContent = 'This agent is currently offline. Please try again later.'; document.getElementById('aiw-messages').appendChild(offlineMsg); }\n" +
+                                    "      })\n      .catch(function() { document.getElementById('aiw-status-text').textContent = 'Online'; });\n\n" +
+                                    "    function addMsg(role, text) { if (!text) return; var msgDiv = document.createElement('div'); msgDiv.className = 'aiw-msg ' + (role === 'user' ? 'user' : 'bot'); msgDiv.textContent = text; document.getElementById('aiw-messages').appendChild(msgDiv); document.getElementById('aiw-messages').scrollTop = 99999; }\n\n" +
+                                    "    function sendMsg() { if (!isOnline) return; var input = document.getElementById('aiw-input'); var text = input.value.trim(); if (!text) return; input.value = ''; messages.push({ role: 'user', content: text }); addMsg('user', text); var typing = document.createElement('div'); typing.className = 'aiw-msg bot aiw-typing'; typing.innerHTML = '<span></span><span></span><span></span>'; document.getElementById('aiw-messages').appendChild(typing); fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: messages }) }).then(function(r) { return r.json(); }).then(function(data) { typing.remove(); if (data.reply) { messages.push({ role: 'assistant', content: data.reply }); addMsg('bot', data.reply); } }).catch(function() { typing.remove(); addMsg('bot', 'Sorry, something went wrong. Please try again.'); }); }\n\n" +
+                                    "    document.getElementById('aiw-send').onclick = sendMsg;\n    document.getElementById('aiw-input').onkeydown = function(e) { if (e.key === 'Enter') sendMsg(); };\n  }\n\n" +
+                                    "  if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', init); } else { init(); }\n" +
+                                    "})();\n</script>";
+
                                 return (
                                     /* ═══ WEB EMBED WIDGET ═══ */
                                     <div className="bg-slate-900/60 rounded-xl border border-slate-700/50 p-6">
@@ -1064,82 +1120,67 @@ export default function AgentViewPage() {
                                             <div className="w-7 h-7 rounded-full bg-indigo-500/20 border border-indigo-500/40 flex items-center justify-center text-xs font-bold text-indigo-400 shrink-0 mt-0.5">1</div>
                                             <div>
                                                 <h4 className="text-sm font-semibold text-white">Copy the Embed Code</h4>
-                                                <p className="text-slate-400 text-xs mt-0.5">Copy the script below and paste it before the closing <code className="text-indigo-400 bg-indigo-500/10 px-1.5 py-0.5 rounded text-xs">&lt;/body&gt;</code> tag of your HTML page.</p>
+                                                <p className="text-slate-400 text-xs mt-0.5">Copy the script below and paste it before the closing <code className="text-indigo-400 bg-indigo-500/10 px-1.5 py-0.5 rounded text-xs">&lt;/body&gt;</code> tag of your HTML page. You can also download a test HTML file.</p>
                                             </div>
                                         </div>
 
                                         {/* Code Block */}
                                         <div className="relative mb-5">
-                                            <button
-                                                onClick={() => {
-                                                    const cssBlock = [
-                                                        "#aiw-chat-bubble { position:fixed; bottom:24px; right:24px; width:60px; height:60px; border-radius:50%; background:" + themeColor + "; cursor:pointer; box-shadow:0 4px 24px rgba(0,0,0,.3); display:flex; align-items:center; justify-content:center; z-index:99999; transition:transform .2s; border:none; }",
-                                                        "#aiw-chat-bubble:hover { transform:scale(1.1); }",
-                                                        "#aiw-chat-bubble svg { width:28px; height:28px; fill:#fff; }",
-                                                        "#aiw-chat-container { position:fixed; bottom:96px; right:24px; width:400px; max-height:600px; background:#0f172a; border:1px solid rgba(100,116,139,.3); border-radius:16px; z-index:99999; display:none; flex-direction:column; overflow:hidden; box-shadow:0 20px 60px rgba(0,0,0,.5); font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; }",
-                                                        "#aiw-chat-container.open { display:flex; }",
-                                                        "#aiw-header { padding:16px 20px; background:" + themeColor + "; display:flex; align-items:center; gap:12px; }",
-                                                        "#aiw-header-title { color:#fff; font-weight:600; font-size:15px; }",
-                                                        "#aiw-header-sub { color:rgba(255,255,255,.7); font-size:12px; }",
-                                                        "#aiw-messages { flex:1; overflow-y:auto; padding:16px; min-height:300px; max-height:420px; }",
-                                                        ".aiw-msg { margin-bottom:12px; max-width:85%; padding:10px 14px; border-radius:12px; font-size:14px; line-height:1.5; word-wrap:break-word; }",
-                                                        ".aiw-msg.user { background:" + themeColor + "; color:#fff; margin-left:auto; border-bottom-right-radius:4px; }",
-                                                        ".aiw-msg.bot { background:#1e293b; color:#e2e8f0; border-bottom-left-radius:4px; }",
-                                                        "#aiw-input-area { padding:12px 16px; border-top:1px solid rgba(100,116,139,.2); display:flex; gap:8px; }",
-                                                        "#aiw-input { flex:1; background:#1e293b; border:1px solid rgba(100,116,139,.3); border-radius:10px; padding:10px 14px; color:#fff; font-size:14px; outline:none; }",
-                                                        "#aiw-input::placeholder { color:#64748b; }",
-                                                        "#aiw-send { background:" + themeColor + "; border:none; border-radius:10px; padding:10px 16px; color:#fff; cursor:pointer; font-size:14px; font-weight:500; }",
-                                                        "#aiw-send:hover { opacity:0.9; }",
-                                                        ".aiw-msg.bot.aiw-typing { display:flex; gap:4px; padding:10px 14px; }",
-                                                        ".aiw-msg.bot.aiw-typing span { width:8px; height:8px; background:#64748b; border-radius:50%; animation:aiw-bounce .6s infinite alternate; }",
-                                                        ".aiw-msg.bot.aiw-typing span:nth-child(2) { animation-delay:.2s; }",
-                                                        ".aiw-msg.bot.aiw-typing span:nth-child(3) { animation-delay:.4s; }",
-                                                        "@keyframes aiw-bounce { to { opacity:.3; transform:translateY(-4px); } }"
-                                                    ].join("\n    ");
-                                                    const brandingHtml = !removeBranding ? '<div style="text-align:center; padding: 8px; font-size:11px; color:#64748b; background:#0f172a; border-top:1px solid rgba(100,116,139,.2)">Powered by <strong>AIWrapper</strong></div>' : '';
-                                                    const displayName = botDisplayName || agent.name;
-                                                    const code = "<!-- AIWrapper Chat Widget -->\n<script>\n(function() {\n" +
-                                                        '  var AGENT_ID = "' + agent.id + '";\n' +
-                                                        '  var API_URL = "http://localhost:8000/api/agents/" + AGENT_ID + "/widget-chat";\n' +
-                                                        '  var STATUS_URL = "http://localhost:8000/api/agents/" + AGENT_ID + "/widget-status";\n\n' +
-                                                        "  // Create styles\n  var style = document.createElement('style');\n" +
-                                                        "  style.textContent = '\\n    " + cssBlock.replace(/'/g, "\\'") + "\\n  ';\n" +
-                                                        "  document.head.appendChild(style);\n\n" +
-                                                        "  function init() {\n" +
-                                                        "    var bubble = document.createElement('button');\n" +
-                                                        "    bubble.id = 'aiw-chat-bubble';\n" +
-                                                        '    bubble.innerHTML = \'<svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>\';\n' +
-                                                        "    document.body.appendChild(bubble);\n\n" +
-                                                        "    var container = document.createElement('div');\n" +
-                                                        "    container.id = 'aiw-chat-container';\n" +
-                                                        '    container.innerHTML = \'<div id="aiw-header"><div><div id="aiw-header-title">' + displayName + '</div><div id="aiw-header-sub">AI Assistant \\u2022 <span id="aiw-status-dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#22c55e;margin:0 4px;vertical-align:middle;"></span><span id="aiw-status-text">Checking...</span></div></div></div><div id="aiw-messages"></div><div id="aiw-input-area"><input id="aiw-input" placeholder="Type a message..." /><button id="aiw-send">Send</button></div>' + brandingHtml + "';\n" +
-                                                        "    document.body.appendChild(container);\n\n" +
-                                                        "    var messages = [];\n    var isOnline = true;\n" +
-                                                        "    bubble.onclick = function() { container.classList.toggle('open'); };\n\n" +
-                                                        "    fetch(STATUS_URL)\n      .then(function(r) { return r.json(); })\n      .then(function(data) {\n" +
-                                                        "        isOnline = data.online;\n        var dot = document.getElementById('aiw-status-dot');\n        var statusText = document.getElementById('aiw-status-text');\n" +
-                                                        "        if (isOnline) { dot.style.background = '#22c55e'; statusText.textContent = 'Online'; }\n" +
-                                                        "        else { dot.style.background = '#ef4444'; statusText.textContent = 'Offline'; document.getElementById('aiw-input').disabled = true; document.getElementById('aiw-input').placeholder = 'Agent is offline'; document.getElementById('aiw-send').style.display = 'none'; var offlineMsg = document.createElement('div'); offlineMsg.className = 'aiw-msg bot'; offlineMsg.textContent = 'This agent is currently offline. Please try again later.'; document.getElementById('aiw-messages').appendChild(offlineMsg); }\n" +
-                                                        "      })\n      .catch(function() { document.getElementById('aiw-status-text').textContent = 'Online'; });\n\n" +
-                                                        "    function addMsg(role, text) { if (!text) return; var msgDiv = document.createElement('div'); msgDiv.className = 'aiw-msg ' + (role === 'user' ? 'user' : 'bot'); msgDiv.textContent = text; document.getElementById('aiw-messages').appendChild(msgDiv); document.getElementById('aiw-messages').scrollTop = 99999; }\n\n" +
-                                                        "    function sendMsg() { if (!isOnline) return; var input = document.getElementById('aiw-input'); var text = input.value.trim(); if (!text) return; input.value = ''; messages.push({ role: 'user', content: text }); addMsg('user', text); var typing = document.createElement('div'); typing.className = 'aiw-msg bot aiw-typing'; typing.innerHTML = '<span></span><span></span><span></span>'; document.getElementById('aiw-messages').appendChild(typing); fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: messages }) }).then(function(r) { return r.json(); }).then(function(data) { typing.remove(); if (data.reply) { messages.push({ role: 'assistant', content: data.reply }); addMsg('bot', data.reply); } }).catch(function() { typing.remove(); addMsg('bot', 'Sorry, something went wrong. Please try again.'); }); }\n\n" +
-                                                        "    document.getElementById('aiw-send').onclick = sendMsg;\n    document.getElementById('aiw-input').onkeydown = function(e) { if (e.key === 'Enter') sendMsg(); };\n  }\n\n" +
-                                                        "  if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', init); } else { init(); }\n" +
-                                                        "})();\n</script>";
-                                                    navigator.clipboard.writeText(code);
-                                                    setCopied(true);
-                                                    setTimeout(() => setCopied(false), 2000);
-                                                }}
-                                                className="absolute top-3 right-3 bg-slate-700 hover:bg-slate-600 text-white rounded-lg px-3 py-1.5 text-xs font-medium flex items-center gap-1.5 transition-colors z-10"
-                                            >
-                                                {copied ? "✓ Copied!" : "📋 Copy"}
-                                            </button>
+                                            <div className="absolute top-3 right-3 flex gap-2 z-10">
+                                                <button
+                                                    onClick={() => {
+                                                        const htmlContent = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${displayName} - Widget Test</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #f8fafc; color: #334155; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 20px; text-align: center; }
+        h1 { font-size: 2.5rem; margin-bottom: 1rem; color: #0f172a; }
+        p { font-size: 1.1rem; max-width: 600px; line-height: 1.6; }
+        .success-box { background: #dcfce7; border: 1px solid #86efac; color: #166534; padding: 1rem 2rem; border-radius: 0.5rem; margin-top: 2rem; font-weight: 500; }
+    </style>
+</head>
+<body>
+    <h1>Widget Test Page</h1>
+    <p>This is a test page generated by AIWrapper to test your agent widget. You should see a chat bubble in the bottom right corner of your screen.</p>
+    <div class="success-box">Your widget is successfully loading on this page!</div>
+    
+${code}
+</body>
+</html>`;
+                                                        const blob = new Blob([htmlContent], { type: "text/html" });
+                                                        const url = URL.createObjectURL(blob);
+                                                        const a = document.createElement("a");
+                                                        a.href = url;
+                                                        a.download = agent.name.toLowerCase().replace(/\s+/g, '-') + "-widget.html";
+                                                        document.body.appendChild(a);
+                                                        a.click();
+                                                        document.body.removeChild(a);
+                                                        URL.revokeObjectURL(url);
+                                                    }}
+                                                    className="bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 rounded-lg px-3 py-1.5 text-xs font-medium flex items-center gap-1.5 transition-colors"
+                                                >
+                                                    ⬇️ Download HTML
+                                                </button>
+                                                <button
+                                                    onClick={() => {
+                                                        navigator.clipboard.writeText(code);
+                                                        setCopied(true);
+                                                        setTimeout(() => setCopied(false), 2000);
+                                                    }}
+                                                    className="bg-slate-700 hover:bg-slate-600 text-white rounded-lg px-3 py-1.5 text-xs font-medium flex items-center gap-1.5 transition-colors"
+                                                >
+                                                    {copied ? "✓ Copied!" : "📋 Copy"}
+                                                </button>
+                                            </div>
                                             <div className="bg-black/60 rounded-lg p-4 font-mono text-xs leading-5 border border-slate-800 overflow-x-auto max-h-[320px] overflow-y-auto">
                                                 <div className="text-slate-500">&lt;!-- AIWrapper Chat Widget --&gt;</div>
                                                 <div className="text-indigo-400">&lt;script&gt;</div>
                                                 <div className="text-emerald-400/80 pl-2">(function() {"{"}</div>
                                                 <div className="text-slate-300 pl-4">var <span className="text-amber-400">AGENT_ID</span> = <span className="text-emerald-400">&quot;{agent.id}&quot;</span>;</div>
-                                                <div className="text-slate-300 pl-4">var <span className="text-amber-400">API_URL</span> = <span className="text-emerald-400">&quot;http://localhost:8000/api/agents/&quot;</span> + AGENT_ID + <span className="text-emerald-400">&quot;/widget-chat&quot;</span>;</div>
+                                                <div className="text-slate-300 pl-4">var <span className="text-amber-400">API_URL</span> = <span className="text-emerald-400">&quot;{apiBase}/api/agents/&quot;</span> + AGENT_ID + <span className="text-emerald-400">&quot;/widget-chat&quot;</span>;</div>
                                                 <div className="text-slate-500 pl-4">// ... widget initialization code</div>
                                                 <div className="text-slate-500 pl-4">// Creates a floating chat bubble + full chat UI</div>
                                                 <div className="text-slate-500 pl-4">// Styled with indigo gradient theme</div>
@@ -1376,8 +1417,8 @@ export default function AgentViewPage() {
                                                     <button
                                                         onClick={() => setWaDmPolicy("allowlist")}
                                                         className={`p - 3 rounded - lg border text - left transition - colors flex flex - col gap - 1 ${waDmPolicy === "allowlist"
-                                                                ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
-                                                                : "bg-slate-800/40 border-slate-700/50 text-slate-400 hover:bg-slate-800"
+                                                            ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                                                            : "bg-slate-800/40 border-slate-700/50 text-slate-400 hover:bg-slate-800"
                                                             } `}
                                                     >
                                                         <span className="font-semibold text-sm">Allowlist Only</span>
@@ -1386,8 +1427,8 @@ export default function AgentViewPage() {
                                                     <button
                                                         onClick={() => setWaDmPolicy("public")}
                                                         className={`p - 3 rounded - lg border text - left transition - colors flex flex - col gap - 1 ${waDmPolicy === "public"
-                                                                ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
-                                                                : "bg-slate-800/40 border-slate-700/50 text-slate-400 hover:bg-slate-800"
+                                                            ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                                                            : "bg-slate-800/40 border-slate-700/50 text-slate-400 hover:bg-slate-800"
                                                             } `}
                                                     >
                                                         <span className="font-semibold text-sm">Public (Anyone)</span>
@@ -1811,8 +1852,8 @@ export default function AgentViewPage() {
                                     <button
                                         onClick={() => setAutoRefresh(!autoRefresh)}
                                         className={`px - 3 py - 1.5 rounded - lg text - xs font - medium transition - all ${autoRefresh
-                                                ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/20"
-                                                : "bg-slate-800 text-slate-400 border border-slate-700 hover:text-white"
+                                            ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/20"
+                                            : "bg-slate-800 text-slate-400 border border-slate-700 hover:text-white"
                                             } `}
                                     >
                                         {autoRefresh ? "⏸ Pause" : "▶ Resume"}
@@ -1843,8 +1884,8 @@ export default function AgentViewPage() {
                                                 key={key}
                                                 onClick={() => setActivityFilter(key)}
                                                 className={`px - 3 py - 1.5 rounded - lg text - xs font - medium transition - all flex items - center gap - 1.5 ${activityFilter === key
-                                                        ? "bg-indigo-500/20 text-indigo-300 border border-indigo-500/40"
-                                                        : "bg-slate-800/60 text-slate-400 border border-slate-700/50 hover:text-white hover:border-slate-600"
+                                                    ? "bg-indigo-500/20 text-indigo-300 border border-indigo-500/40"
+                                                    : "bg-slate-800/60 text-slate-400 border border-slate-700/50 hover:text-white hover:border-slate-600"
                                                     } `}
                                             >
                                                 {label}
@@ -1897,14 +1938,14 @@ export default function AgentViewPage() {
                                                         )}
                                                         <div className="flex items-start gap-3 px-4 py-3 hover:bg-slate-800/30 transition-colors group">
                                                             {/* Icon */}
-                                                            <div className={`mt - 0.5 w - 7 h - 7 rounded - lg flex items - center justify - center text - xs shrink - 0 border ${colorParts[1]} ${colorParts[2]} `}>
+                                                            <div className={`mt-0.5 w-7 h-7 rounded-lg flex items-center justify-center text-xs shrink-0 border ${colorParts[1]} ${colorParts[2]}`}>
                                                                 {event.icon}
                                                             </div>
 
                                                             {/* Content */}
                                                             <div className="flex-1 min-w-0">
                                                                 <div className="flex items-center gap-2">
-                                                                    <span className={`text - sm font - medium ${colorParts[0]} `}>
+                                                                    <span className={`text-sm font-medium ${colorParts[0]}`}>
                                                                         {event.title}
                                                                     </span>
                                                                     {event.session_ip && (
@@ -2006,12 +2047,12 @@ export default function AgentViewPage() {
                                     </div>
                                     <button
                                         onClick={() => setRemoveBranding(!removeBranding)}
-                                        className={`relative w - 12 h - 7 rounded - full transition - colors duration - 200 ${removeBranding ? 'bg-indigo-500' : 'bg-slate-600'
-                                            } `}
+                                        className={`relative w-12 h-7 rounded-full transition-colors duration-200 ${removeBranding ? 'bg-indigo-500' : 'bg-slate-600'
+                                            }`}
                                     >
                                         <span
-                                            className={`absolute top - 1 left - 1 w - 5 h - 5 bg - white rounded - full shadow transition - transform duration - 200 ${removeBranding ? 'translate-x-5' : 'translate-x-0'
-                                                } `}
+                                            className={`absolute top-1 left-1 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${removeBranding ? 'translate-x-5' : 'translate-x-0'
+                                                }`}
                                         />
                                     </button>
                                 </div>
@@ -2027,6 +2068,7 @@ export default function AgentViewPage() {
                                                 widget_branding: {
                                                     botDisplayName,
                                                     themeColor,
+                                                    avatarUrl,
                                                     removeBranding
                                                 }
                                             };
@@ -2277,8 +2319,8 @@ export default function AgentViewPage() {
                                                                                 {sessionMessages.map((m: any, mi: number) => (
                                                                                     <div key={mi} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'} `}>
                                                                                         <div className={`max - w - [80 %] rounded - xl px - 3.5 py - 2.5 text - xs leading - relaxed ${m.role === 'user'
-                                                                                                ? 'bg-indigo-500/20 text-indigo-100 border border-indigo-500/20'
-                                                                                                : 'bg-slate-800/60 text-slate-300 border border-slate-700/30'
+                                                                                            ? 'bg-indigo-500/20 text-indigo-100 border border-indigo-500/20'
+                                                                                            : 'bg-slate-800/60 text-slate-300 border border-slate-700/30'
                                                                                             } `}>
                                                                                             <div className="flex items-center gap-2 mb-1">
                                                                                                 <span className="font-semibold text-[10px] uppercase tracking-wide opacity-60">
@@ -2329,7 +2371,7 @@ export default function AgentViewPage() {
             {
                 configureToolModal && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-                        <div className={`bg - [#1C1C1E] border border - slate - 700 / 50 rounded - xl w - full ${configureToolModal === "knowledge_base" ? "max-w-5xl" : "max-w-lg"} overflow - hidden shadow - 2xl flex flex - col max - h - [90vh]`}>
+                        <div className={`bg-[#1C1C1E] border border-slate-700/50 rounded-xl w-full ${configureToolModal === "knowledge_base" ? "max-w-5xl" : "max-w-lg"} overflow-hidden shadow-2xl flex flex-col max-h-[90vh]`}>
                             {/* Modal Header */}
                             <div className="flex items-start justify-between p-5 border-b border-slate-800">
                                 <div className="flex items-center gap-3">
@@ -2611,8 +2653,89 @@ export default function AgentViewPage() {
                                     </>
                                 )}
 
+                                {/* Google Calendar */}
+                                {configureToolModal === "google_calendar" && (
+                                    <div className="space-y-4">
+                                        {/* Connection Status */}
+                                        <div className={`flex items-center gap-3 p-4 rounded-xl border ${agent?.tool_configs?.google_calendar?.connected
+                                            ? "bg-green-500/5 border-green-500/20"
+                                            : "bg-slate-800/50 border-slate-700/50"
+                                            }`}>
+                                            <span className={`w-2.5 h-2.5 rounded-full ${agent?.tool_configs?.google_calendar?.connected ? "bg-green-400 animate-pulse" : "bg-slate-500"}`} />
+                                            <div className="flex-1">
+                                                <p className="text-sm font-medium text-white">
+                                                    {agent?.tool_configs?.google_calendar?.connected ? "✅ Google Calendar Connected" : "Not Connected"}
+                                                </p>
+                                                <p className="text-xs text-slate-400">
+                                                    {agent?.tool_configs?.google_calendar?.connected
+                                                        ? "Your calendar is linked. The agent can read and create events."
+                                                        : "Connect your Google Calendar to let this agent manage your events."}
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        {/* Connect / Disconnect */}
+                                        {agent?.tool_configs?.google_calendar?.connected ? (
+                                            <button
+                                                onClick={async () => {
+                                                    if (!agent) return;
+                                                    try {
+                                                        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+                                                        const token = localStorage.getItem("access_token");
+                                                        await fetch(`${apiUrl}/api/google-calendar/disconnect?agent_id=${agent.id}`, {
+                                                            method: "DELETE",
+                                                            headers: { Authorization: `Bearer ${token}` },
+                                                        });
+                                                        // Refresh agent data
+                                                        const res = await agentApi.get(agent.id);
+                                                        setAgent(res.data);
+                                                    } catch (err) { console.error(err); }
+                                                }}
+                                                className="w-full py-3 rounded-xl text-sm font-semibold text-red-400 border border-red-500/20 hover:bg-red-500/10 transition-all"
+                                            >
+                                                Disconnect Google Calendar
+                                            </button>
+                                        ) : (
+                                            <button
+                                                onClick={async () => {
+                                                    if (!agent) return;
+                                                    try {
+                                                        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+                                                        const token = localStorage.getItem("access_token");
+                                                        const res = await fetch(`${apiUrl}/api/google-calendar/auth-url?agent_id=${agent.id}`, {
+                                                            headers: { Authorization: `Bearer ${token}` },
+                                                        });
+                                                        const data = await res.json();
+                                                        if (data.auth_url) window.location.href = data.auth_url;
+                                                        else alert(data.detail || "Failed to get auth URL. Make sure admin has configured OAuth credentials.");
+                                                    } catch (err) { console.error(err); alert("Failed to connect. Please try again."); }
+                                                }}
+                                                className="w-full py-3 rounded-xl text-sm font-semibold bg-indigo-500 text-white hover:bg-indigo-600 transition-all flex items-center justify-center gap-2"
+                                            >
+                                                <span>📅</span> Connect Google Calendar
+                                            </button>
+                                        )}
+
+                                        {/* Info */}
+                                        <div className="p-4 rounded-xl bg-indigo-500/5 border border-indigo-500/20">
+                                            <div className="flex items-start gap-3">
+                                                <span className="text-lg mt-0.5">💡</span>
+                                                <div>
+                                                    <p className="text-sm font-medium text-indigo-300">What this does</p>
+                                                    <ul className="text-xs text-slate-400 mt-2 space-y-1 list-disc list-inside">
+                                                        <li>Lists your upcoming meetings and events</li>
+                                                        <li>Creates new events when asked</li>
+                                                        <li>Cancels events by request</li>
+                                                    </ul>
+                                                    <p className="text-xs text-slate-500 mt-2">Your calendar data stays private — only this agent can access it.</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
                                 {/* Fallback for other tools */}
-                                {!["lead_catcher", "knowledge_base", "browser"].includes(configureToolModal) && (
+                                {!["lead_catcher", "knowledge_base", "browser", "google_calendar"].includes(configureToolModal) && (
                                     <div>
                                         <p className="text-sm text-slate-400 mb-4">
                                             Advanced JSON configuration for this tool.

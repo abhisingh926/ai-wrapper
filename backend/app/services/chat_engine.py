@@ -181,6 +181,31 @@ RULES:
         llm_tools.append(WEB_SEARCH_TOOL_SCHEMA)
         llm_tools.append(FETCH_WEBPAGE_TOOL_SCHEMA)
 
+    if "google_calendar" in (agent.tools or []):
+        from app.services.google_calendar import LIST_EVENTS_SCHEMA, CREATE_EVENT_SCHEMA, DELETE_EVENT_SCHEMA
+        llm_tools.append(LIST_EVENTS_SCHEMA)
+        llm_tools.append(CREATE_EVENT_SCHEMA)
+        llm_tools.append(DELETE_EVENT_SCHEMA)
+
+    if "solar_calculator" in (agent.tools or []):
+        from app.services.solar_calculator import SOLAR_CALCULATOR_SCHEMA
+        llm_tools.append(SOLAR_CALCULATOR_SCHEMA)
+        solar_prompt = """
+
+--- SOLAR CALCULATOR INSTRUCTIONS ---
+When the user wants a solar calculation, estimate, or quote, you MUST ask questions ONE AT A TIME in this exact order. Do NOT ask multiple questions at once. Wait for each answer before asking the next:
+
+Step 1: "📍 What is your location? (Enter your pincode or city name)"
+Step 2: "🏠 What is your available rooftop area? (Enter in sq ft or sq meters)"
+Step 3: "⚡ What is your monthly electricity consumption? (in kWh/month — you can find this on your electricity bill)"
+Step 4: "💰 What is your average monthly electricity bill? (in ₹)"
+Step 5: "📋 Which scheme applies to you?\n  • **Rural** — village/agricultural area\n  • **City** — urban/metro area\n  • **PM-Surya Ghar** — government subsidy scheme"
+Step 6: "🔋 What type of backup power do you currently use?\n  • **Diesel** generator\n  • **Battery/Inverter**\n  • **None**\nIf diesel or battery, how many hours per day do you use it?"
+
+After collecting ALL 6 answers, call the calculate_solar_power tool with the collected data. Then present the report in a clean, well-formatted way with sections for System Details, Cost & Subsidy, Monthly Generation, Savings, and Environmental Impact.
+--- END SOLAR CALCULATOR INSTRUCTIONS ---"""
+        system_prompt += solar_prompt
+
     # 6. Prepare messages array — use full conversation history from DB
     messages = [{"role": "system", "content": system_prompt}]
     if chat_history:
@@ -321,6 +346,55 @@ RULES:
                         tool_result = await fetch_webpage(fn_args.get("url", ""))
                         tool_result_str = json.dumps(tool_result)
                         print(f"[Browser Tool] Fetched: {fn_args.get('url')}")
+                    elif fn_name in ("list_calendar_events", "create_calendar_event", "delete_calendar_event"):
+                        from app.services.google_calendar import list_events, create_event, delete_event
+                        # Read calendar OAuth tokens from agent's per-user tool_configs
+                        cal_config = (agent.tool_configs or {}).get("google_calendar", {})
+                        cal_id = "primary"
+                        
+                        if not cal_config.get("connected"):
+                            tool_result_str = json.dumps({"error": "Google Calendar is not connected. The user needs to connect their Google Calendar in agent settings."})
+                        elif fn_name == "list_calendar_events":
+                            tool_result = await list_events(
+                                cal_config, cal_id,
+                                max_results=fn_args.get("max_results", 10),
+                                days_ahead=fn_args.get("days_ahead", 7),
+                            )
+                            tool_result_str = json.dumps(tool_result)
+                            print(f"[Calendar] Listed events")
+                        elif fn_name == "create_calendar_event":
+                            tool_result = await create_event(
+                                cal_config, cal_id,
+                                summary=fn_args.get("summary", ""),
+                                start_time=fn_args.get("start_time", ""),
+                                end_time=fn_args.get("end_time", ""),
+                                description=fn_args.get("description", ""),
+                                location=fn_args.get("location", ""),
+                            )
+                            tool_result_str = json.dumps(tool_result)
+                            print(f"[Calendar] Created event: {fn_args.get('summary')}")
+                        elif fn_name == "delete_calendar_event":
+                            tool_result = await delete_event(
+                                cal_config, cal_id,
+                                event_id=fn_args.get("event_id", ""),
+                            )
+                            tool_result_str = json.dumps(tool_result)
+                            print(f"[Calendar] Deleted event: {fn_args.get('event_id')}")
+                    elif fn_name == "calculate_solar_power":
+                        from app.services.solar_calculator import calculate_solar_power as calc_solar
+                        tool_result = await calc_solar(
+                            location=fn_args.get("location", ""),
+                            rooftop_area=fn_args.get("rooftop_area", 100),
+                            rooftop_area_unit=fn_args.get("rooftop_area_unit", "sqm"),
+                            monthly_consumption_kwh=fn_args.get("monthly_consumption_kwh", 300),
+                            monthly_bill_rs=fn_args.get("monthly_bill_rs", 2400),
+                            scheme=fn_args.get("scheme", "pm_surya_ghar"),
+                            backup_type=fn_args.get("backup_type", "none"),
+                            backup_hours_per_day=fn_args.get("backup_hours_per_day", 0),
+                            system_size_kw=fn_args.get("system_size_kw"),
+                        )
+                        tool_result_str = json.dumps(tool_result)
+                        print(f"[Solar] Calculated for: {fn_args.get('location')}")
                     else:
                         tool_result_str = json.dumps({"error": f"Unknown tool: {fn_name}"})
                     
