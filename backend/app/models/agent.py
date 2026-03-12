@@ -10,7 +10,7 @@ class Agent(Base):
     __tablename__ = "agents"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
     name = Column(String(255), nullable=False)
 
     # AI Configuration
@@ -30,7 +30,7 @@ class Agent(Base):
     version = Column(String(20), default="1.0.0")
 
     # Status
-    status = Column(String(20), default="draft")            # draft, live, paused
+    status = Column(String(20), default="draft", index=True)            # draft, live, paused
     
     # Usage Statistics
     messages_count = Column(Integer, default=0)

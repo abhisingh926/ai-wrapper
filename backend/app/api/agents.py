@@ -5,7 +5,7 @@ Agents API — CRUD for AI agents created via the wizard.
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, desc, func, delete
 from datetime import datetime
@@ -32,27 +32,27 @@ router = APIRouter(prefix="/api/agents", tags=["agents"])
 # ── Schemas ──
 
 class AgentCreate(BaseModel):
-    name: str
-    ai_provider: str
-    ai_model: str
-    platform: str
-    tools: List[str] = []
-    tool_configs: dict = {}
-    system_prompt: str = "You are a helpful AI assistant."
-    temperature: float = 0.7
-    version: str = "1.0.0"
+    name: str = Field(..., min_length=1, max_length=100)
+    ai_provider: str = Field(..., pattern="^(openai|anthropic|google|azure)$")
+    ai_model: str = Field(..., min_length=1, max_length=100)
+    platform: str = Field(default="web", pattern="^(web|whatsapp|discord|telegram|slack)$")
+    tools: List[str] = Field(default_factory=list)
+    tool_configs: dict = Field(default_factory=dict)
+    system_prompt: str = Field(default="You are a helpful AI assistant.", max_length=10000)
+    temperature: float = Field(default=0.7, ge=0.0, le=2.0)
+    version: str = Field(default="1.0.0", pattern=r"^\d+\.\d+\.\d+$")
 
 
 class AgentUpdate(BaseModel):
-    name: Optional[str] = None
-    ai_provider: Optional[str] = None
-    ai_model: Optional[str] = None
-    platform: Optional[str] = None
+    name: Optional[str] = Field(None, min_length=1, max_length=100)
+    ai_provider: Optional[str] = Field(None, pattern="^(openai|anthropic|google|azure)$")
+    ai_model: Optional[str] = Field(None, min_length=1, max_length=100)
+    platform: Optional[str] = Field(None, pattern="^(web|whatsapp|discord|telegram|slack)$")
     tools: Optional[List[str]] = None
     tool_configs: Optional[dict] = None
-    system_prompt: Optional[str] = None
-    temperature: Optional[float] = None
-    version: Optional[str] = None
+    system_prompt: Optional[str] = Field(None, max_length=10000)
+    temperature: Optional[float] = Field(None, ge=0.0, le=2.0)
+    version: Optional[str] = Field(None, pattern=r"^\d+\.\d+\.\d+$")
 
 
 class AgentOut(BaseModel):

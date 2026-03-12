@@ -77,6 +77,10 @@ async def scheduler_loop():
         except Exception as e:
             logger.error(f"Scheduler loop error: {e}")
             
+        # Run cleanup task once per hour (when minute is 0)
+        if datetime.utcnow().minute == 0:
+            await cleanup_expired_tokens()
+            
         # Wait until the start of the next minute
         now = datetime.utcnow()
         sleep_seconds = 60 - now.second
@@ -85,3 +89,26 @@ async def scheduler_loop():
 def start_scheduler():
     """Kick off the background loop."""
     asyncio.create_task(scheduler_loop())
+
+
+# ─── Cleanup Task: Expired Reset Tokens ─────────────────────────────────────
+
+async def cleanup_expired_tokens():
+    """Clean up expired password reset tokens from the database."""
+    from app.models.user import User
+    from sqlalchemy import update
+    
+    try:
+        async with async_session() as db:
+            # Clean up expired reset tokens
+            result = await db.execute(
+                update(User)
+                .where(User.reset_token_expires != None)
+                .where(User.reset_token_expires < datetime.utcnow())
+                .values(reset_token=None, reset_token_expires=None)
+            )
+            await db.commit()
+            if result.rowcount > 0:
+                logger.info(f"Cleaned up {result.rowcount} expired reset tokens")
+    except Exception as e:
+        logger.error(f"Error cleaning up expired tokens: {e}")
