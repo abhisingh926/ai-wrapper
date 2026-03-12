@@ -303,13 +303,18 @@ async def delete_global_api_key(
 
 @router.get("/usage")
 async def get_user_usage(
+    limit: int = Query(20, le=100),
+    offset: int = Query(0),
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get per-user usage stats for message tracking."""
-    # Get all users with their workflow and execution counts
+    """Get per-user usage stats for message tracking with pagination."""
+    # Get total count
+    total = (await db.execute(select(func.count(User.id)))).scalar()
+    
+    # Get paginated users
     users_result = await db.execute(
-        select(User).order_by(User.created_at.desc()).limit(100)
+        select(User).order_by(User.created_at.desc()).limit(limit).offset(offset)
     )
     users = users_result.scalars().all()
 
@@ -354,7 +359,12 @@ async def get_user_usage(
             "joined": str(user.created_at) if user.created_at else None,
         })
 
-    return usage_data
+    return {
+        "data": usage_data,
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+    }
 
 
 # ── Pricing Management ──
