@@ -115,6 +115,28 @@ body {
   animation: pulse-glow 2s ease-in-out infinite;
 }
 
+/* Skill Step Pulse */
+@keyframes skill-step-glow {
+
+  0%,
+  100% {
+    box-shadow: 0 0 10px rgba(139, 92, 246, 0.1);
+  }
+
+  50% {
+    box-shadow: 0 0 25px rgba(139, 92, 246, 0.3);
+  }
+}
+
+.skill-step-pulse {
+  animation: skill-step-glow 3s ease-in-out infinite;
+}
+
+.skill-step-pulse:nth-child(1) { animation-delay: 0s; }
+.skill-step-pulse:nth-child(2) { animation-delay: 0.5s; }
+.skill-step-pulse:nth-child(3) { animation-delay: 1s; }
+.skill-step-pulse:nth-child(4) { animation-delay: 1.5s; }
+
 /* Button Styles */
 .btn-primary {
   background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));

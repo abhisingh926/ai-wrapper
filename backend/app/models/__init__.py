@@ -8,6 +8,9 @@ from app.models.admin_channel import AdminChannel
 from app.models.agent_knowledge import AgentKnowledge
 from app.models.lead import AgentLead
 from app.models.chat_session import ChatSession, ChatMessage
+from app.models.skill import Skill
+from app.models.skill_config import UserSkillConfig
+from app.models.skill_message_log import SkillMessageLog
 
 __all__ = [
     "User", "UserRole",
@@ -20,6 +23,9 @@ __all__ = [
     "AgentKnowledge",
     "AgentLead",
     "ChatSession", "ChatMessage",
+    "Skill",
+    "UserSkillConfig",
+    "SkillMessageLog",
 ]
 
 

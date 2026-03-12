@@ -131,6 +131,13 @@ export const adminApi = {
     // Platform Settings
     getSettings: () => api.get("/api/admin/settings"),
     updateSettings: (data: any) => api.put("/api/admin/settings", data),
+
+    // Autonomous Skills
+    getSkills: () => api.get("/api/admin/skills"),
+    createSkill: (data: any) => api.post("/api/admin/skills", data),
+    updateSkill: (id: string, data: any) => api.put(`/api/admin/skills/${id}`, data),
+    deleteSkill: (id: string) => api.delete(`/api/admin/skills/${id}`),
+    seedSkills: () => api.post("/api/admin/skills/seed"),
 };
 
 /* ──── Assistant API ──── */
@@ -149,6 +156,20 @@ export const toolsApi = {
 /* ──── Public Channels API ──── */
 export const channelsApi = {
     list: () => api.get("/api/channels"),
+};
+
+/* ──── Public Landing Settings API ──── */
+export const landingApi = {
+    getSettings: () => api.get("/api/landing-settings"),
+};
+
+/* ──── Public Skills API ──── */
+export const skillsApi = {
+    list: () => api.get("/api/skills"),
+    getConfig: (skillId: string) => api.get(`/api/skills/${skillId}/config`),
+    saveConfig: (skillId: string, data: any) => api.post(`/api/skills/${skillId}/config`, data),
+    test: (skillId: string, data: any) => api.post(`/api/skills/${skillId}/test`, data),
+    getLogs: (skillId: string) => api.get(`/api/skills/${skillId}/logs`),
 };
 
 /* ──── Agents API ──── */

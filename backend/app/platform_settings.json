@@ -14,5 +14,6 @@
     "starter": true,
     "growth": true,
     "business": true
-  }
+  },
+  "show_autonomous_skills_section": true
 }

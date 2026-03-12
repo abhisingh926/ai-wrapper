@@ -103,6 +103,71 @@ const testimonials = [
   },
 ];
 
+/* ───── Autonomous Skills data ───── */
+const autonomousSkills = [
+  {
+    icon: "📈",
+    title: "Market Analyst",
+    description: "Monitors asset prices & market trends. Alerts you when critical thresholds are met.",
+    tags: ["Web Search", "Proactive Alerts"],
+    schedule: "Hourly",
+    gradient: "from-emerald-500/20 to-teal-500/10",
+    iconBg: "from-emerald-500 to-teal-400",
+  },
+  {
+    icon: "📰",
+    title: "News Sentinel",
+    description: "Scans global news for keywords or entities and alerts you of important developments.",
+    tags: ["Web Search", "Proactive Alerts"],
+    schedule: "Daily at 8 AM",
+    gradient: "from-blue-500/20 to-indigo-500/10",
+    iconBg: "from-blue-500 to-indigo-400",
+  },
+  {
+    icon: "🔍",
+    title: "Competitor Watcher",
+    description: "Checks competitor websites for major updates, product launches, or pricing changes.",
+    tags: ["Web Search", "Proactive Alerts"],
+    schedule: "Weekly",
+    gradient: "from-violet-500/20 to-purple-500/10",
+    iconBg: "from-violet-500 to-purple-400",
+  },
+  {
+    icon: "🐙",
+    title: "GitHub Issue Triage",
+    description: "Scans your repos for unassigned or critical issues and summarizes them for you.",
+    tags: ["GitHub Data", "Proactive Alerts"],
+    schedule: "Hourly (9-5)",
+    gradient: "from-orange-500/20 to-amber-500/10",
+    iconBg: "from-orange-500 to-amber-400",
+  },
+  {
+    icon: "☀️",
+    title: "Daily Briefing",
+    description: "Gathers your schedule, weather, and breaking news into one concise morning alert.",
+    tags: ["Calendar", "Weather", "News"],
+    schedule: "Daily at 7 AM",
+    gradient: "from-cyan-500/20 to-sky-500/10",
+    iconBg: "from-cyan-500 to-sky-400",
+  },
+  {
+    icon: "🧬",
+    title: "Deep Researcher",
+    description: "Performs multi-step web research on a topic and synthesizes a comprehensive report.",
+    tags: ["Multi-Step Search", "Reports"],
+    schedule: "Custom",
+    gradient: "from-rose-500/20 to-pink-500/10",
+    iconBg: "from-rose-500 to-pink-400",
+  },
+];
+
+const skillExecutionSteps = [
+  { step: "01", icon: "⏰", title: "Wake Up", desc: 'Cron triggers at schedule' },
+  { step: "02", icon: "🔎", title: "Search", desc: 'search_web("BTC price")' },
+  { step: "03", icon: "🧠", title: "Analyze", desc: 'Is price > $100k?' },
+  { step: "04", icon: "🔔", title: "Alert", desc: 'proactive_alert(user)' },
+];
+
 const defaultPricingPlans = [
   {
     name: "Free",
@@ -168,6 +233,7 @@ function AnimatedCounter({ target, suffix = "" }: { target: string; suffix?: str
 export default function LandingPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [pricingPlans, setPricingPlans] = useState(defaultPricingPlans);
+  const [showAutonomousSkills, setShowAutonomousSkills] = useState(true);
 
   useEffect(() => {
     axios
@@ -186,6 +252,14 @@ export default function LandingPage() {
         );
       })
       .catch(() => { });
+
+    // Fetch landing page visibility settings
+    axios
+      .get(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/landing-settings`)
+      .then((res) => {
+        setShowAutonomousSkills(res.data.show_autonomous_skills_section !== false);
+      })
+      .catch(() => { /* default: show */ });
   }, []);
 
   return (
@@ -422,6 +496,109 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* ─── AGENTS THAT WORK WHILE YOU SLEEP ─── */}
+      {showAutonomousSkills && (
+        <section id="autonomous-skills" className="py-28 bg-[#0c1222] relative overflow-hidden">
+          {/* Decorative background elements */}
+          <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-violet-500/5 rounded-full blur-[150px]" />
+          <div className="absolute bottom-0 right-1/4 w-[400px] h-[400px] bg-indigo-500/5 rounded-full blur-[150px]" />
+
+          <div className="max-w-7xl mx-auto px-6 relative z-10">
+            {/* Badge + Heading */}
+            <div className="text-center mb-16">
+              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-violet-500/30 bg-violet-500/10 mb-6">
+                <span className="text-violet-400 text-sm">⚡</span>
+                <span className="text-xs font-semibold text-violet-300 uppercase tracking-wider">Autonomous Background Skills</span>
+              </div>
+              <h2 className="text-3xl md:text-5xl font-bold mb-4">
+                Agents That Work <span className="text-gradient">While You Sleep</span>
+              </h2>
+              <p className="text-slate-400 text-lg max-w-2xl mx-auto">
+                Your agent doesn&apos;t just respond &mdash; it acts. Schedule autonomous skills that monitor markets,
+                scan news, triage issues, and alert you proactively.
+              </p>
+            </div>
+
+            {/* Skill Cards Grid */}
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5 mb-16">
+              {autonomousSkills.map((skill) => (
+                <div
+                  key={skill.title}
+                  className={`rounded-2xl p-6 bg-gradient-to-br ${skill.gradient} border border-white/5
+                  hover:border-violet-500/30 transition-all duration-300 group hover:scale-[1.02] flex flex-col`}
+                >
+                  <div className="flex items-start gap-4 mb-4">
+                    <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${skill.iconBg} flex items-center justify-center text-lg shrink-0 shadow-lg`}>
+                      {skill.icon}
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-bold text-white group-hover:text-violet-300 transition-colors">
+                        {skill.title}
+                      </h3>
+                      <p className="text-slate-400 text-sm leading-relaxed mt-1">{skill.description}</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-auto flex items-center gap-2 flex-wrap pt-4 border-t border-white/5">
+                    {skill.tags.map((tag) => (
+                      <span key={tag} className="text-[11px] font-medium px-2.5 py-1 rounded-full bg-white/5 text-slate-400 border border-white/5">
+                        {tag}
+                      </span>
+                    ))}
+                    <span className="ml-auto text-[11px] font-medium px-2.5 py-1 rounded-full bg-violet-500/10 text-violet-400 border border-violet-500/20 flex items-center gap-1">
+                      <span>⏱</span> {skill.schedule}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* How a Skill Executes - Flow Diagram */}
+            <div className="max-w-3xl mx-auto">
+              <div className="gradient-card rounded-2xl p-8">
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <h3 className="text-lg font-bold text-white">How a Skill Executes</h3>
+                    <p className="text-xs text-slate-500 mt-1">Example: Market Analyst checking Bitcoin price</p>
+                  </div>
+                  <span className="text-[11px] font-medium px-3 py-1 rounded-full bg-green-500/10 text-green-400 border border-green-500/20">
+                    Autonomous
+                  </span>
+                </div>
+
+                <div className="flex flex-col md:flex-row items-center justify-between gap-4 md:gap-2">
+                  {skillExecutionSteps.map((s, i) => (
+                    <div key={s.step} className="flex items-center gap-2 md:gap-0 w-full md:w-auto">
+                      <div className="flex flex-col items-center text-center min-w-[100px]">
+                        <div className="text-[10px] text-slate-500 font-medium uppercase tracking-wider mb-2">
+                          Step {s.step}
+                        </div>
+                        <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-500/20 to-indigo-500/20 border border-violet-500/20 flex items-center justify-center text-2xl mb-2 skill-step-pulse">
+                          {s.icon}
+                        </div>
+                        <div className="text-sm font-semibold text-white">{s.title}</div>
+                        <div className="text-[11px] text-slate-500 mt-0.5 font-mono">{s.desc}</div>
+                      </div>
+
+                      {i < skillExecutionSteps.length - 1 && (
+                        <>
+                          <svg width="40" height="16" viewBox="0 0 40 16" className="text-violet-500/50 hidden md:block shrink-0 mx-1">
+                            <path d="M0 8h30M26 3l8 5-8 5" stroke="currentColor" strokeWidth="1.5" fill="none" />
+                          </svg>
+                          <svg width="16" height="30" viewBox="0 0 16 30" className="text-violet-500/50 md:hidden shrink-0">
+                            <path d="M8 0v22M3 18l5 8 5-8" stroke="currentColor" strokeWidth="1.5" fill="none" />
+                          </svg>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
       {/* ─── TESTIMONIALS ─── */}
       <section className="py-24 bg-[#0c1222]">
         <div className="max-w-7xl mx-auto px-6">
@@ -477,8 +654,8 @@ export default function LandingPage() {
               <div
                 key={plan.name}
                 className={`rounded-2xl p-8 transition-all duration-300 hover:scale-[1.03] relative ${plan.popular
-                    ? "bg-gradient-to-b from-indigo-500/20 to-indigo-900/20 border-2 border-indigo-500/50 glow-primary"
-                    : "gradient-card"
+                  ? "bg-gradient-to-b from-indigo-500/20 to-indigo-900/20 border-2 border-indigo-500/50 glow-primary"
+                  : "gradient-card"
                   }`}
               >
                 {plan.popular && (

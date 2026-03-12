@@ -9,6 +9,12 @@ const AI_PROVIDERS = [
     { slug: "gemini", name: "Google Gemini", icon: "✨", desc: "Gemini Pro, Gemini Ultra", placeholder: "AIza..." },
 ];
 
+const NOTIFICATION_CHANNELS = [
+    { slug: "whatsapp", name: "WhatsApp", icon: "💬", desc: "WhatsApp API Token", placeholder: "EAAL8..." },
+    { slug: "telegram", name: "Telegram", icon: "✈️", desc: "Telegram Bot Token", placeholder: "123456:ABC-DEF..." },
+    { slug: "gmail", name: "Email (Resend/SMTP)", icon: "📧", desc: "Email API Key", placeholder: "re_..." },
+];
+
 const ALL_FILE_TYPES = [
     { ext: ".pdf", label: "PDF", icon: "📄" },
     { ext: ".txt", label: "Text", icon: "📝" },
@@ -25,6 +31,7 @@ function SettingsTab() {
     const [allowedTypes, setAllowedTypes] = useState<string[]>([".pdf", ".txt"]);
     const [maxUploadMb, setMaxUploadMb] = useState(10);
     const [scrapingByPlan, setScrapingByPlan] = useState<Record<string, boolean>>({ free: false, starter: true, growth: true, business: true });
+    const [showAutonomousSkills, setShowAutonomousSkills] = useState(true);
     const [saving, setSaving] = useState(false);
     const [loaded, setLoaded] = useState(false);
     const [msg, setMsg] = useState("");
@@ -37,6 +44,7 @@ function SettingsTab() {
             setAllowedTypes(d.allowed_file_types || [".pdf", ".txt"]);
             setMaxUploadMb(d.max_upload_size_mb || 10);
             setScrapingByPlan(d.url_scraping_by_plan || { free: false, starter: true, growth: true, business: true });
+            setShowAutonomousSkills(d.show_autonomous_skills_section !== false);
             setLoaded(true);
         }).catch(() => setLoaded(true));
     }, []);
@@ -61,6 +69,7 @@ function SettingsTab() {
                 allowed_file_types: allowedTypes,
                 max_upload_size_mb: maxUploadMb,
                 url_scraping_by_plan: scrapingByPlan,
+                show_autonomous_skills_section: showAutonomousSkills,
             });
             setMsg("Settings saved!");
             setTimeout(() => setMsg(""), 3000);
@@ -201,6 +210,31 @@ function SettingsTab() {
                 </p>
             </div>
 
+            {/* ── Section 4: Landing Page Sections ── */}
+            <div className="bg-slate-800/50 border border-slate-700/60 rounded-2xl p-6">
+                <h3 className="text-lg font-semibold text-white mb-1">🌐 Landing Page Sections</h3>
+                <p className="text-sm text-slate-400 mb-6">Toggle visibility of sections on the public landing page.</p>
+
+                <div className="flex items-center justify-between p-4 rounded-xl bg-slate-900/50 border border-slate-700/50">
+                    <div className="flex items-center gap-3">
+                        <span className="text-2xl">⚡</span>
+                        <div>
+                            <div className="text-sm font-medium text-white">Agents That Work While You Sleep</div>
+                            <div className="text-xs text-slate-500">Autonomous skills section with skill cards and execution flow diagram</div>
+                        </div>
+                    </div>
+                    <button
+                        onClick={() => setShowAutonomousSkills(!showAutonomousSkills)}
+                        className={`relative w-12 h-6 rounded-full transition-colors duration-200 ${showAutonomousSkills ? "bg-emerald-500" : "bg-slate-600"}`}
+                    >
+                        <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform duration-200 ${showAutonomousSkills ? "translate-x-6" : "translate-x-0"}`} />
+                    </button>
+                </div>
+                <p className="text-xs text-slate-500 mt-3">
+                    {showAutonomousSkills ? "✅ Section is visible on the landing page" : "🚫 Section is hidden from the landing page"}
+                </p>
+            </div>
+
             {/* ── Save Button ── */}
             <div className="flex items-center gap-3">
                 <button
@@ -221,7 +255,7 @@ function SettingsTab() {
 }
 
 export default function AdminPage() {
-    const [tab, setTab] = useState<"analytics" | "users" | "api-keys" | "usage" | "pricing" | "tools" | "channels" | "models" | "settings">("analytics");
+    const [tab, setTab] = useState<"analytics" | "users" | "api-keys" | "usage" | "pricing" | "tools" | "channels" | "models" | "skills" | "settings">("analytics");
     const [analytics, setAnalytics] = useState<any>(null);
     const [users, setUsers] = useState<any[]>([]);
     const [search, setSearch] = useState("");
@@ -232,6 +266,10 @@ export default function AdminPage() {
     const [keyInputs, setKeyInputs] = useState<Record<string, string>>({});
     const [savingKey, setSavingKey] = useState<string | null>(null);
     const [keyMsg, setKeyMsg] = useState<{ slug: string; type: string; text: string } | null>(null);
+
+    // WhatsApp QR State
+    const [adminWaQrImage, setAdminWaQrImage] = useState<string | null>(null);
+    const [adminWaStatus, setAdminWaStatus] = useState<string>("");
 
     // Usage state
     const [usageData, setUsageData] = useState<any[]>([]);
@@ -267,6 +305,13 @@ export default function AdminPage() {
     const [showAddChannel, setShowAddChannel] = useState(false);
     const [newChannel, setNewChannel] = useState({ slug: "", name: "", icon: "📱", description: "", badge: "stable", is_upcoming: false });
 
+    // Skills state
+    const [adminSkills, setAdminSkills] = useState<any[]>([]);
+    const [skillsLoading, setSkillsLoading] = useState(false);
+    const [showAddSkill, setShowAddSkill] = useState(false);
+    const [newSkill, setNewSkill] = useState({ slug: "", name: "", icon: "🔧", description: "", schedule: "Daily", tags: [] as string[], gradient: "from-emerald-500/20 to-teal-500/10", icon_bg: "from-emerald-500 to-teal-400" });
+    const [skillTagInput, setSkillTagInput] = useState("");
+
     // Models config state
     const [modelsConfig, setModelsConfig] = useState<any>(null);
     const [modelsLoading, setModelsLoading] = useState(false);
@@ -285,6 +330,7 @@ export default function AdminPage() {
         if (tab === "tools") loadAdminTools();
         if (tab === "channels") loadAdminChannels();
         if (tab === "models") loadModelsConfig();
+        if (tab === "skills") loadAdminSkills();
     }, [tab]);
 
     const loadAnalytics = async () => {
@@ -346,8 +392,8 @@ export default function AdminPage() {
         }
     };
 
-    const handleSaveKey = async (slug: string) => {
-        const key = keyInputs[slug];
+    const handleSaveKey = async (slug: string, overrideKey?: string) => {
+        const key = overrideKey !== undefined ? overrideKey : keyInputs[slug];
         if (!key?.trim()) return;
         setSavingKey(slug);
         setKeyMsg(null);
@@ -360,11 +406,60 @@ export default function AdminPage() {
             setKeyMsg({ slug, type: "error", text: "Failed to save." });
         }
         setSavingKey(null);
+        setTimeout(() => setKeyMsg(null), 3000);
+    };
+
+    const handleConnectGlobalWhatsApp = () => {
+        setAdminWaQrImage(null);
+        setAdminWaStatus("Connecting to WhatsApp Bridge...");
+
+        const agentId = "global_admin_whatsapp";
+        const bridgeUrl = process.env.NEXT_PUBLIC_WA_BRIDGE_URL || "http://localhost:3001";
+        const eventSource = new EventSource(`${bridgeUrl}/wa/qr/${agentId}`);
+
+        eventSource.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                if (data.type === 'qr') {
+                    setAdminWaQrImage(data.data);
+                    setAdminWaStatus("Scan QR Code to link WhatsApp");
+                } else if (data.type === 'status') {
+                    setAdminWaStatus(data.message);
+                } else if (data.type === 'connected') {
+                    setAdminWaQrImage(null);
+                    setAdminWaStatus(data.message);
+                    eventSource.close();
+
+                    // Save to backend so we know it's connected
+                    handleSaveKey("whatsapp", "connected_via_qr");
+                } else if (data.type === 'error') {
+                    setAdminWaStatus("Error: " + data.message);
+                    eventSource.close();
+                }
+            } catch (e) {
+                console.error("Failed to parse SSE message", e);
+            }
+        };
+
+        eventSource.onerror = (err) => {
+            setAdminWaStatus("Failed to connect to bridge server.");
+            eventSource.close();
+        };
     };
 
     const handleDeleteKey = async (slug: string) => {
         if (!confirm("Remove this API key? Workflows using this provider will stop working.")) return;
         try {
+            if (slug === 'whatsapp') {
+                setAdminWaStatus("");
+                setAdminWaQrImage(null);
+                try {
+                    const bridgeUrl = process.env.NEXT_PUBLIC_WA_BRIDGE_URL || "http://localhost:3001";
+                    await fetch(`${bridgeUrl}/wa/logout/global_admin_whatsapp`, { method: "POST" });
+                } catch (e) {
+                    console.error("Failed to disconnect from bridge", e);
+                }
+            }
             await adminApi.deleteApiKey(slug);
             setKeyMsg({ slug, type: "success", text: "Removed." });
             loadGlobalKeys();
@@ -488,6 +583,48 @@ export default function AdminPage() {
         } catch { }
     };
 
+    // ─── Skills Management ───
+    const loadAdminSkills = async () => {
+        setSkillsLoading(true);
+        try {
+            const res = await adminApi.getSkills();
+            setAdminSkills(res.data);
+        } catch { }
+        setSkillsLoading(false);
+    };
+
+    const handleToggleSkillEnabled = async (skillId: string, enabled: boolean) => {
+        try {
+            await adminApi.updateSkill(skillId, { enabled });
+            loadAdminSkills();
+        } catch { }
+    };
+
+    const handleAddSkill = async () => {
+        if (!newSkill.slug || !newSkill.name) return;
+        try {
+            await adminApi.createSkill(newSkill);
+            setNewSkill({ slug: "", name: "", icon: "🔧", description: "", schedule: "Daily", tags: [], gradient: "from-emerald-500/20 to-teal-500/10", icon_bg: "from-emerald-500 to-teal-400" });
+            setShowAddSkill(false);
+            loadAdminSkills();
+        } catch { }
+    };
+
+    const handleDeleteSkill = async (skillId: string) => {
+        if (!confirm("Delete this skill?")) return;
+        try {
+            await adminApi.deleteSkill(skillId);
+            loadAdminSkills();
+        } catch { }
+    };
+
+    const handleSeedSkills = async () => {
+        try {
+            await adminApi.seedSkills();
+            loadAdminSkills();
+        } catch { }
+    };
+
     // ─── Models Config Management ───
     const loadModelsConfig = async () => {
         setModelsLoading(true);
@@ -563,6 +700,7 @@ export default function AdminPage() {
         { key: "models", label: "🧠 AI Models" },
         { key: "tools", label: "🔧 Tools" },
         { key: "channels", label: "📱 Channels" },
+        { key: "skills", label: "⚡ Skills" },
         { key: "pricing", label: "💰 Pricing" },
         { key: "usage", label: "📈 Usage" },
         { key: "users", label: "👥 Users" },
@@ -688,6 +826,103 @@ export default function AdminPage() {
                                             {savingKey === provider.slug ? "Saving..." : existing ? "Update" : "Save"}
                                         </button>
                                     </div>
+                                    {msg && (
+                                        <p className={`mt-2 text-xs ${msg.type === "success" ? "text-green-400" : "text-red-400"}`}>
+                                            {msg.text}
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+                        );
+                    })}
+
+                    <div className="pt-8 mb-2">
+                        <h3 className="text-lg font-bold text-white">Notification Delivery Channels</h3>
+                        <p className="text-sm text-slate-400">Configure API tokens for sending alerts and messages natively via the platform.</p>
+                    </div>
+
+                    {NOTIFICATION_CHANNELS.map((provider) => {
+                        const existing = connectedKeyMap.get(provider.slug);
+                        const msg = keyMsg?.slug === provider.slug ? keyMsg : null;
+
+                        return (
+                            <div key={provider.slug} className="glass rounded-2xl overflow-hidden mt-4">
+                                <div className="p-6 flex items-center justify-between">
+                                    <div className="flex items-center gap-4">
+                                        <div className="text-3xl">{provider.icon}</div>
+                                        <div>
+                                            <h3 className="text-base font-semibold text-white">{provider.name}</h3>
+                                            <p className="text-xs text-slate-400">{provider.desc}</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        {existing ? (
+                                            <span className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-green-500/10 text-green-400 border border-green-500/20">
+                                                <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+                                                Active
+                                            </span>
+                                        ) : (
+                                            <span className="px-3 py-1 rounded-full text-xs font-medium bg-slate-600/30 text-slate-400">
+                                                Not configured
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div className="px-6 pb-6 border-t border-slate-700/30 pt-4">
+                                    {existing && (
+                                        <div className="flex items-center justify-between mb-3 p-3 rounded-lg bg-slate-800/30">
+                                            <div>
+                                                <span className="text-xs text-slate-500">Current key: </span>
+                                                <code className="text-xs text-indigo-300 font-mono">{provider.slug === 'whatsapp' ? 'Connected via Bridge' : existing.masked_key}</code>
+                                            </div>
+                                            <button
+                                                onClick={() => handleDeleteKey(provider.slug)}
+                                                className="text-xs text-red-400/70 hover:text-red-400 transition-colors px-3 py-1.5 rounded-lg hover:bg-red-500/10"
+                                            >
+                                                Remove
+                                            </button>
+                                        </div>
+                                    )}
+
+                                    {provider.slug === 'whatsapp' && !existing ? (
+                                        <div className="flex flex-col gap-3">
+                                            {adminWaQrImage ? (
+                                                <div className="flex flex-col items-center gap-3 p-4 bg-white rounded-xl mx-auto w-fit">
+                                                    <img src={adminWaQrImage} alt="WhatsApp QR Code" className="w-48 h-48 rounded-lg" />
+                                                    <p className="text-xs text-slate-500 font-medium">{adminWaStatus}</p>
+                                                </div>
+                                            ) : (
+                                                <div className="flex flex-col gap-3 mt-1">
+                                                    {adminWaStatus && <p className="text-sm text-indigo-400 text-center">{adminWaStatus}</p>}
+                                                    <button
+                                                        onClick={handleConnectGlobalWhatsApp}
+                                                        className="btn-primary text-sm !py-3 w-full border border-indigo-500/30 hover:border-indigo-400/50"
+                                                    >
+                                                        📱 Generate Connection QR Code
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ) : !existing ? (
+                                        <div className="flex gap-3">
+                                            <input
+                                                type="password"
+                                                value={keyInputs[provider.slug] || ""}
+                                                onChange={(e) => setKeyInputs({ ...keyInputs, [provider.slug]: e.target.value })}
+                                                className="flex-1 px-4 py-3 rounded-xl bg-slate-800/50 border border-slate-600/50 text-white
+                                                    placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all font-mono text-sm"
+                                                placeholder={provider.placeholder}
+                                            />
+                                            <button
+                                                onClick={() => handleSaveKey(provider.slug)}
+                                                disabled={savingKey === provider.slug || !keyInputs[provider.slug]?.trim()}
+                                                className="btn-primary text-sm !py-3 !px-6 disabled:opacity-50 shrink-0"
+                                            >
+                                                {savingKey === provider.slug ? "Saving..." : "Save"}
+                                            </button>
+                                        </div>
+                                    ) : null}
                                     {msg && (
                                         <p className={`mt-2 text-xs ${msg.type === "success" ? "text-green-400" : "text-red-400"}`}>
                                             {msg.text}
@@ -1648,6 +1883,147 @@ export default function AdminPage() {
                         </div>
                     ) : (
                         <div className="text-center py-12 text-slate-500">No model configuration found</div>
+                    )}
+                </div>
+            )}
+
+            {/* ═══ Skills Tab ═══ */}
+            {tab === "skills" && (
+                <div className="max-w-6xl mx-auto">
+                    <div className="flex justify-between items-center mb-6">
+                        <div>
+                            <h2 className="text-2xl font-bold text-white flex items-center gap-2 mb-1">
+                                <span>⚡</span> Autonomous Skills
+                            </h2>
+                            <p className="text-sm text-slate-400">Create and manage autonomous background skills. Toggle visibility for users.</p>
+                        </div>
+                        <div className="flex gap-2">
+                            {adminSkills.length === 0 && (
+                                <button
+                                    onClick={handleSeedSkills}
+                                    className="text-sm font-medium px-4 py-2 rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 hover:bg-indigo-500/20 transition-colors"
+                                >
+                                    🌱 Seed Defaults
+                                </button>
+                            )}
+                            <button
+                                onClick={() => setShowAddSkill(!showAddSkill)}
+                                className="text-sm font-medium px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-white border border-white/10 transition-colors"
+                            >
+                                + Create Skill
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Create Skill Form */}
+                    {showAddSkill && (
+                        <div className="bg-slate-900/60 rounded-xl p-6 mb-8 border border-slate-700/50">
+                            <h3 className="text-sm font-semibold text-white mb-4">Create New Skill</h3>
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
+                                <input value={newSkill.slug} onChange={(e) => setNewSkill({ ...newSkill, slug: e.target.value })} placeholder="slug (e.g. market-analyst)" className="px-3 py-2 bg-slate-950/50 border border-slate-800 rounded-lg text-white text-sm focus:outline-none focus:border-indigo-500/50" />
+                                <input value={newSkill.name} onChange={(e) => setNewSkill({ ...newSkill, name: e.target.value })} placeholder="Name" className="px-3 py-2 bg-slate-950/50 border border-slate-800 rounded-lg text-white text-sm focus:outline-none focus:border-indigo-500/50" />
+                                <input value={newSkill.icon} onChange={(e) => setNewSkill({ ...newSkill, icon: e.target.value })} placeholder="Icon (emoji)" className="px-3 py-2 bg-slate-950/50 border border-slate-800 rounded-lg text-white text-sm focus:outline-none focus:border-indigo-500/50" />
+                                <input value={newSkill.description} onChange={(e) => setNewSkill({ ...newSkill, description: e.target.value })} placeholder="Short description" className="px-3 py-2 bg-slate-950/50 border border-slate-800 rounded-lg text-white text-sm focus:outline-none focus:border-indigo-500/50 md:col-span-2" />
+                                <select value={newSkill.schedule} onChange={(e) => setNewSkill({ ...newSkill, schedule: e.target.value })} className="px-3 py-2 bg-slate-950/50 border border-slate-800 rounded-lg text-white text-sm focus:outline-none focus:border-indigo-500/50">
+                                    <option value="Hourly">Hourly</option>
+                                    <option value="Daily at 7 AM">Daily at 7 AM</option>
+                                    <option value="Daily at 8 AM">Daily at 8 AM</option>
+                                    <option value="Daily at 9 AM">Daily at 9 AM</option>
+                                    <option value="Hourly (9-5)">Hourly (9-5)</option>
+                                    <option value="Weekly">Weekly</option>
+                                    <option value="Custom">Custom</option>
+                                </select>
+                            </div>
+                            <div className="mb-4">
+                                <label className="text-xs text-slate-400 mb-1 block">Tags</label>
+                                <div className="flex flex-wrap gap-2 mb-2">
+                                    {newSkill.tags.map((tag) => (
+                                        <span key={tag} className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                                            {tag}
+                                            <button onClick={() => setNewSkill({ ...newSkill, tags: newSkill.tags.filter(t => t !== tag) })} className="text-indigo-400/60 hover:text-indigo-300">✕</button>
+                                        </span>
+                                    ))}
+                                </div>
+                                <div className="flex gap-2">
+                                    <input value={skillTagInput} onChange={(e) => setSkillTagInput(e.target.value)}
+                                        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (skillTagInput.trim()) { setNewSkill({ ...newSkill, tags: [...newSkill.tags, skillTagInput.trim()] }); setSkillTagInput(""); } } }}
+                                        placeholder="Add tag..." className="flex-1 px-3 py-2 bg-slate-950/50 border border-slate-800 rounded-lg text-white text-sm focus:outline-none focus:border-indigo-500/50" />
+                                    <button onClick={() => { if (skillTagInput.trim()) { setNewSkill({ ...newSkill, tags: [...newSkill.tags, skillTagInput.trim()] }); setSkillTagInput(""); } }}
+                                        className="px-3 py-2 rounded-lg bg-slate-800 text-slate-400 hover:text-white text-sm border border-slate-700">Add</button>
+                                </div>
+                            </div>
+                            <div className="flex justify-end gap-3">
+                                <button onClick={() => setShowAddSkill(false)} className="px-4 py-2 rounded-lg text-sm font-medium text-slate-400 hover:text-white transition-colors">Cancel</button>
+                                <button onClick={handleAddSkill} className="px-5 py-2 rounded-lg text-sm font-medium bg-indigo-500 text-white hover:bg-indigo-600 transition-colors shadow-lg shadow-indigo-500/20">Create Skill</button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Skills Grid */}
+                    {skillsLoading ? (
+                        <div className="flex justify-center py-12">
+                            <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+                        </div>
+                    ) : adminSkills.length === 0 ? (
+                        <div className="text-center py-16">
+                            <div className="text-4xl mb-3">⚡</div>
+                            <p className="text-slate-400 mb-4">No skills yet. Seed the defaults or create your first skill.</p>
+                            <button onClick={handleSeedSkills} className="px-6 py-2.5 rounded-lg text-sm font-semibold bg-gradient-to-r from-indigo-500 to-cyan-500 text-white hover:opacity-90 transition-all">
+                                🌱 Seed Default Skills
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                            {adminSkills.map((s) => (
+                                <div key={s.id} className={`rounded-2xl p-5 bg-gradient-to-br ${s.gradient || 'from-slate-500/20 to-slate-600/10'} border border-white/5 ${!s.enabled ? 'opacity-50' : ''} transition-all relative`}>
+                                    {/* Visibility Badge */}
+                                    <div className="absolute top-4 right-4">
+                                        <span className={`inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full ${s.enabled
+                                            ? 'bg-green-500/10 text-green-400 border border-green-500/20'
+                                            : 'bg-red-500/10 text-red-400 border border-red-500/20'
+                                            }`}>
+                                            <span className={`w-1.5 h-1.5 rounded-full ${s.enabled ? 'bg-green-400' : 'bg-red-400'}`} />
+                                            {s.enabled ? 'Visible' : 'Hidden'}
+                                        </span>
+                                    </div>
+
+                                    {/* Icon + Name */}
+                                    <div className="flex items-start gap-3 mb-3 pr-20">
+                                        <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${s.icon_bg || 'from-slate-500 to-slate-400'} flex items-center justify-center text-lg shrink-0`}>
+                                            {s.icon}
+                                        </div>
+                                        <div>
+                                            <h3 className="text-base font-bold text-white">{s.name}</h3>
+                                            <p className="text-slate-400 text-xs mt-0.5">{s.description}</p>
+                                        </div>
+                                    </div>
+
+                                    {/* Meta */}
+                                    <div className="flex items-center gap-3 text-xs text-slate-500 mb-3">
+                                        <span>⏱ {s.schedule}</span>
+                                        <span className="text-slate-700">•</span>
+                                        <span>🏷 {(s.tags || []).join(', ') || 'No tags'}</span>
+                                    </div>
+
+                                    {/* Actions */}
+                                    <div className="flex items-center justify-between pt-3 border-t border-white/5">
+                                        <button
+                                            onClick={() => handleDeleteSkill(s.id)}
+                                            className="text-xs px-3 py-1.5 rounded-lg bg-white/5 text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-all border border-white/5"
+                                        >
+                                            🗑️ Delete
+                                        </button>
+                                        <button
+                                            onClick={() => handleToggleSkillEnabled(s.id, !s.enabled)}
+                                            className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${s.enabled ? 'bg-emerald-500' : 'bg-slate-600'}`}
+                                            title={s.enabled ? 'Hide skill' : 'Show skill'}
+                                        >
+                                            <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform duration-200 ${s.enabled ? 'translate-x-5' : 'translate-x-0'}`} />
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
                     )}
                 </div>
             )}

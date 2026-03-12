@@ -692,6 +692,22 @@ async def get_platform_settings(_admin: User = Depends(require_admin)):
     return load_platform_settings()
 
 
+# ── Public Landing Page Settings (no auth required) ──
+
+from fastapi import APIRouter as _APIRouter
+
+landing_router = APIRouter(prefix="/api", tags=["landing"])
+
+
+@landing_router.get("/landing-settings")
+async def get_landing_settings():
+    """Public endpoint: returns only landing-page visibility flags."""
+    settings = load_platform_settings()
+    return {
+        "show_autonomous_skills_section": settings.get("show_autonomous_skills_section", True),
+    }
+
+
 @router.put("/settings")
 async def update_platform_settings(
     request: Request,
@@ -708,3 +724,183 @@ async def update_platform_settings(
         raise HTTPException(status_code=400, detail="max_content_size_kb must be between 50 and 1000")
     save_platform_settings(body)
     return {"message": "Settings saved successfully."}
+
+
+# ── Autonomous Skills Management ──
+
+from app.models.skill import Skill
+
+
+class SkillCreate(BaseModel):
+    slug: str
+    name: str
+    icon: str = "🔧"
+    description: str = ""
+    schedule: str = "Daily"
+    tags: list[str] = []
+    gradient: str = "from-slate-500/20 to-slate-600/10"
+    icon_bg: str = "from-slate-500 to-slate-400"
+    enabled: bool = True
+    sort_order: int = 0
+
+
+class SkillUpdate(BaseModel):
+    name: Optional[str] = None
+    icon: Optional[str] = None
+    description: Optional[str] = None
+    schedule: Optional[str] = None
+    tags: Optional[list[str]] = None
+    gradient: Optional[str] = None
+    icon_bg: Optional[str] = None
+    enabled: Optional[bool] = None
+    sort_order: Optional[int] = None
+
+
+@router.get("/skills")
+async def admin_list_skills(
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """List all skills (admin view - includes hidden)."""
+    result = await db.execute(select(Skill).order_by(Skill.sort_order))
+    skills = result.scalars().all()
+    return [
+        {
+            "id": str(s.id),
+            "slug": s.slug,
+            "name": s.name,
+            "icon": s.icon,
+            "description": s.description,
+            "schedule": s.schedule,
+            "tags": s.tags or [],
+            "gradient": s.gradient,
+            "icon_bg": s.icon_bg,
+            "enabled": s.enabled,
+            "sort_order": s.sort_order,
+        }
+        for s in skills
+    ]
+
+
+@router.post("/skills")
+async def admin_create_skill(
+    data: SkillCreate,
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a new autonomous skill."""
+    existing = await db.execute(select(Skill).where(Skill.slug == data.slug))
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="Skill slug already exists")
+
+    skill = Skill(**data.model_dump())
+    db.add(skill)
+    await db.commit()
+    await db.refresh(skill)
+    return {"id": str(skill.id), "slug": skill.slug, "name": skill.name}
+
+
+@router.put("/skills/{skill_id}")
+async def admin_update_skill(
+    skill_id: str,
+    data: SkillUpdate,
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update a skill (enable/disable/edit)."""
+    result = await db.execute(select(Skill).where(Skill.id == skill_id))
+    skill = result.scalar_one_or_none()
+    if not skill:
+        raise HTTPException(status_code=404, detail="Skill not found")
+
+    for field, value in data.model_dump(exclude_none=True).items():
+        setattr(skill, field, value)
+    skill.updated_at = datetime.utcnow()
+    await db.commit()
+    return {"detail": "Skill updated", "slug": skill.slug}
+
+
+@router.delete("/skills/{skill_id}")
+async def admin_delete_skill(
+    skill_id: str,
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete a skill."""
+    result = await db.execute(select(Skill).where(Skill.id == skill_id))
+    skill = result.scalar_one_or_none()
+    if not skill:
+        raise HTTPException(status_code=404, detail="Skill not found")
+    await db.delete(skill)
+    await db.commit()
+    return {"detail": "Skill deleted"}
+
+
+@router.post("/skills/seed")
+async def seed_default_skills(
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Seed the database with default autonomous skills if empty."""
+    result = await db.execute(select(Skill))
+    if result.scalars().first():
+        return {"message": "Skills already seeded."}
+
+    defaults = [
+        {"slug": "market-analyst", "name": "Market Analyst", "icon": "📈",
+         "description": "Monitors asset prices & market trends. Alerts you when critical thresholds are met.",
+         "schedule": "Hourly", "tags": ["Web Search", "Proactive Alerts"],
+         "gradient": "from-emerald-500/20 to-teal-500/10", "icon_bg": "from-emerald-500 to-teal-400", "sort_order": 1},
+        {"slug": "news-sentinel", "name": "News Sentinel", "icon": "📰",
+         "description": "Scans global news for keywords or entities and alerts you of important developments.",
+         "schedule": "Daily at 8 AM", "tags": ["Web Search", "Proactive Alerts"],
+         "gradient": "from-blue-500/20 to-indigo-500/10", "icon_bg": "from-blue-500 to-indigo-400", "sort_order": 2},
+        {"slug": "competitor-watcher", "name": "Competitor Watcher", "icon": "🔍",
+         "description": "Checks competitor websites for major updates, product launches, or pricing changes.",
+         "schedule": "Weekly", "tags": ["Web Search", "Proactive Alerts"],
+         "gradient": "from-violet-500/20 to-purple-500/10", "icon_bg": "from-violet-500 to-purple-400", "sort_order": 3},
+        {"slug": "github-issue-triage", "name": "GitHub Issue Triage", "icon": "🐙",
+         "description": "Scans your repos for unassigned or critical issues and summarizes them for you.",
+         "schedule": "Hourly (9-5)", "tags": ["GitHub Data", "Proactive Alerts"],
+         "gradient": "from-orange-500/20 to-amber-500/10", "icon_bg": "from-orange-500 to-amber-400", "sort_order": 4},
+        {"slug": "daily-briefing", "name": "Daily Briefing", "icon": "☀️",
+         "description": "Gathers your schedule, weather, and breaking news into one concise morning alert.",
+         "schedule": "Daily at 7 AM", "tags": ["Calendar", "Weather", "News"],
+         "gradient": "from-cyan-500/20 to-sky-500/10", "icon_bg": "from-cyan-500 to-sky-400", "sort_order": 5},
+        {"slug": "deep-researcher", "name": "Deep Researcher", "icon": "🧬",
+         "description": "Performs multi-step web research on a topic and synthesizes a comprehensive report.",
+         "schedule": "Custom", "tags": ["Multi-Step Search", "Reports"],
+         "gradient": "from-rose-500/20 to-pink-500/10", "icon_bg": "from-rose-500 to-pink-400", "sort_order": 6},
+    ]
+
+    for s_data in defaults:
+        db.add(Skill(**s_data))
+
+    await db.commit()
+    return {"message": "Default skills seeded successfully."}
+
+
+# ── Public Skills Endpoint (no auth) ──
+
+@landing_router.get("/skills")
+async def list_public_skills(db: AsyncSession = Depends(get_db)):
+    """Public endpoint: returns only enabled skills for the autonomous page."""
+    result = await db.execute(
+        select(Skill).where(Skill.enabled == True).order_by(Skill.sort_order)
+    )
+    skills = result.scalars().all()
+    return [
+        {
+            "id": str(s.id),
+            "slug": s.slug,
+            "name": s.name,
+            "icon": s.icon,
+            "description": s.description,
+            "schedule": s.schedule,
+            "tags": s.tags or [],
+            "gradient": s.gradient,
+            "icon_bg": s.icon_bg,
+        }
+        for s in skills
+    ]
+

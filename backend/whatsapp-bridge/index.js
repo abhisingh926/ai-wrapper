@@ -297,6 +297,51 @@ app.get('/wa/status/:agentId', (req, res) => {
     return res.json({ status: 'active', linked });
 });
 
+// ─── Logout endpoint ────────────────────────────────────────────────────────
+app.post('/wa/logout/:agentId', async (req, res) => {
+    const { agentId } = req.params;
+
+    if (activeSessions.has(agentId)) {
+        const sock = activeSessions.get(agentId);
+        try { await sock.logout(); } catch (e) { }
+        try { sock.end(); } catch (e) { }
+        activeSessions.delete(agentId);
+    }
+
+    const authDir = path.join(__dirname, 'auth', agentId);
+    if (fs.existsSync(authDir)) {
+        fs.rmSync(authDir, { recursive: true, force: true });
+    }
+
+    return res.json({ success: true, message: "Logged out and auth cleared" });
+});
+
+// ─── Send Message endpoint ──────────────────────────────────────────────────
+app.post('/wa/send/:agentId', async (req, res) => {
+    const { agentId } = req.params;
+    const { phone, message } = req.body;
+
+    if (!phone || !message) {
+        return res.status(400).json({ success: false, error: 'Phone and message are required' });
+    }
+
+    const sock = activeSessions.get(agentId);
+    if (!sock) {
+        return res.status(404).json({ success: false, error: 'Agent session not found or disconnected' });
+    }
+
+    // Format phone number
+    const formattedPhone = phone.replace(/[^0-9]/g, '') + '@s.whatsapp.net';
+
+    try {
+        await sock.sendMessage(formattedPhone, { text: message });
+        return res.json({ success: true });
+    } catch (err) {
+        console.error(`[${agentId}] ❌ Error sending message to ${phone}:`, err.message);
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 // ─── Start server & auto-reconnect ──────────────────────────────────────────
 app.listen(PORT, async () => {
     console.log(`🟢 WhatsApp Bridge running on http://localhost:${PORT}`);
