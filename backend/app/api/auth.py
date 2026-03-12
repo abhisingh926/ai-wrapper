@@ -3,6 +3,9 @@ import secrets
 import logging
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, status
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from app.middleware.rate_limit import limiter
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.database import get_db
@@ -21,13 +24,16 @@ from app.utils.email import send_verification_email, send_reset_password_email
 
 logger = logging.getLogger(__name__)
 
+# Rate limiter instance
+auth_limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 # In-memory store for OAuth CSRF tokens (in production, use Redis)
 oauth_state_store = {}
 
 
-@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@auth_limiter.limit("5/minute")
+@router.post("/register"), response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
     """Register a new user with email and password."""
     # Check if email already exists
@@ -65,7 +71,8 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
     return user
 
 
-@router.post("/login", response_model=TokenResponse)
+@auth_limiter.limit("5/minute")
+@router.post("/login"), response_model=TokenResponse)
 async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
     """Login with email and password, returns JWT tokens."""
     result = await db.execute(select(User).where(User.email == data.email))
@@ -105,7 +112,8 @@ async def verify_email(token: str, db: AsyncSession = Depends(get_db)):
     return {"message": "Email verified successfully"}
 
 
-@router.post("/forgot-password")
+@auth_limiter.limit("3/minute")
+@router.post("/forgot-password"))
 async def forgot_password(data: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)):
     """Send password reset link to user's email."""
     result = await db.execute(select(User).where(User.email == data.email))
@@ -122,7 +130,8 @@ async def forgot_password(data: ForgotPasswordRequest, db: AsyncSession = Depend
     return {"message": "If an account exists, a reset link has been sent"}
 
 
-@router.post("/reset-password")
+@auth_limiter.limit("3/minute")
+@router.post("/reset-password"))
 async def reset_password(data: ResetPasswordRequest, db: AsyncSession = Depends(get_db)):
     """Reset password using token from reset link."""
     result = await db.execute(
