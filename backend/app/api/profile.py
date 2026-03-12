@@ -1,3 +1,4 @@
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -51,6 +52,7 @@ async def change_password(
         raise HTTPException(status_code=400, detail="Current password is incorrect")
 
     current_user.password_hash = hash_password(data.new_password)
+    current_user.password_changed_at = datetime.utcnow()
     await db.commit()
     return {"message": "Password changed successfully"}
 
