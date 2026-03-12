@@ -1,4 +1,6 @@
 import uuid
+import secrets
+import logging
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,7 +19,12 @@ from app.middleware.auth import (
 )
 from app.utils.email import send_verification_email, send_reset_password_email
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+
+# In-memory store for OAuth CSRF tokens (in production, use Redis)
+oauth_state_store = {}
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
@@ -35,6 +42,7 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
         email=data.email,
         password_hash=hash_password(data.password),
         verification_token=verification_token,
+        password_changed_at=datetime.utcnow(),  # Initialize password version
     )
     db.add(user)
     await db.flush()
@@ -68,8 +76,16 @@ async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
 
     if not user.email_verified:
         raise HTTPException(status_code=403, detail="Please verify your email first")
+    
+    # Check if user is blocked
+    if user.is_blocked:
+        raise HTTPException(status_code=403, detail="Your account has been blocked. Please contact support.")
 
-    access_token = create_access_token(data={"sub": str(user.id)})
+    # Include password_changed_at in token for invalidation
+    access_token = create_access_token(
+        data={"sub": str(user.id)},
+        password_changed_at=user.password_changed_at
+    )
     return TokenResponse(access_token=access_token)
 
 
@@ -121,6 +137,7 @@ async def reset_password(data: ResetPasswordRequest, db: AsyncSession = Depends(
         raise HTTPException(status_code=400, detail="Invalid or expired reset token")
 
     user.password_hash = hash_password(data.new_password)
+    user.password_changed_at = datetime.utcnow()  # Update password version to invalidate old tokens
     user.reset_token = None
     user.reset_token_expires = None
     await db.commit()
@@ -184,12 +201,20 @@ async def oauth_initiate(provider: str):
             detail=f"{provider.title()} OAuth not configured. Set OAUTH_{provider.upper()}_CLIENT_ID in .env",
         )
 
+    # Generate secure CSRF state token
+    csrf_token = secrets.token_urlsafe(32)
+    # Store CSRF token with provider info (expires in 10 minutes)
+    oauth_state_store[csrf_token] = {
+        "provider": provider,
+        "expires": datetime.utcnow() + timedelta(minutes=10)
+    }
+    
     params = {
         "client_id": client_id,
         "redirect_uri": redirect_uri,
         "response_type": "code",
         "scope": cfg["scopes"],
-        "state": provider,  # simple state; use CSRF token in production
+        "state": csrf_token,  # Use secure CSRF token
     }
 
     if provider == "apple":
@@ -219,8 +244,23 @@ async def oauth_callback(
     import httpx
 
     code = payload.code
-    state = payload.state
-    provider = state.lower()
+    csrf_token = payload.state
+    
+    # Validate CSRF token
+    state_data = oauth_state_store.get(csrf_token)
+    if not state_data:
+        raise HTTPException(status_code=400, detail="Invalid OAuth state. Please try again.")
+    
+    # Check expiration
+    if datetime.utcnow() > state_data["expires"]:
+        del oauth_state_store[csrf_token]
+        raise HTTPException(status_code=400, detail="OAuth state expired. Please try again.")
+    
+    provider = state_data["provider"]
+    
+    # Clean up used CSRF token
+    del oauth_state_store[csrf_token]
+    
     if provider not in OAUTH_PROVIDERS:
         raise HTTPException(status_code=400, detail="Invalid provider state")
 
@@ -230,9 +270,8 @@ async def oauth_callback(
     client_secret = getattr(settings, f"OAUTH_{provider.upper()}_CLIENT_SECRET", "")
     redirect_uri = settings.OAUTH_REDIRECT_URI
 
-    # Exchange code for access token
-    print(f"[OAuth] Exchanging code for provider={provider}, redirect_uri={redirect_uri}")
-    print(f"[OAuth] client_id={client_id[:20]}..., client_secret={'set' if client_secret else 'MISSING'}")
+    # Exchange code for access token (no debug prints - use logging)
+    logger.info(f"[OAuth] Exchanging code for provider={provider}")
     async with httpx.AsyncClient() as client:
         token_resp = await client.post(
             cfg["token_url"],
@@ -245,8 +284,6 @@ async def oauth_callback(
             },
             headers={"Accept": "application/json"},
         )
-
-    print(f"[OAuth] Token response status={token_resp.status_code}, body={token_resp.text[:500]}")
 
     if token_resp.status_code != 200:
         error_detail = token_resp.json() if token_resp.headers.get("content-type", "").startswith("application/json") else token_resp.text
@@ -284,40 +321,61 @@ async def oauth_callback(
         raise HTTPException(status_code=400, detail="Unsupported provider")
 
     if not oauth_email:
-        raise HTTPException(status_code=400, detail="Could not retrieve email from provider")
+        raise HTTPException(
+            status_code=400, 
+            detail="Could not retrieve email from provider. Please ensure your account has an email address."
+        )
 
     # Find or create user
     result = await db.execute(select(User).where(User.email == oauth_email))
     user = result.scalar_one_or_none()
 
     if not user:
-        user = User(
-            name=oauth_name,
-            email=oauth_email,
-            password_hash="",  # No password for OAuth users
-            email_verified=True,
-            oauth_provider=provider,
-        )
-        db.add(user)
-        await db.flush()
+        try:
+            user = User(
+                name=oauth_name,
+                email=oauth_email,
+                password_hash="",  # No password for OAuth users
+                email_verified=True,
+                oauth_provider=provider,
+                password_changed_at=datetime.utcnow(),
+            )
+            db.add(user)
+            await db.flush()
 
-        # Create free subscription for new OAuth users
-        subscription = Subscription(
-            user_id=user.id,
-            plan=PlanType.FREE,
-            status=SubscriptionStatus.ACTIVE,
-            workflow_limit=3,
-            monthly_run_limit=100,
-        )
-        db.add(subscription)
-        await db.commit()
-        await db.refresh(user)
+            # Create free subscription for new OAuth users
+            subscription = Subscription(
+                user_id=user.id,
+                plan=PlanType.FREE,
+                status=SubscriptionStatus.ACTIVE,
+                workflow_limit=3,
+                monthly_run_limit=100,
+            )
+            db.add(subscription)
+            await db.commit()
+            await db.refresh(user)
+        except Exception as e:
+            await db.rollback()
+            logger.error(f"Error creating OAuth user: {e}")
+            raise HTTPException(status_code=500, detail="Failed to create account. Please try again.")
 
-    # Issue JWT (but block if user is blocked)
-    if not user.email_verified:
+    # Check if user is blocked
+    if user.is_blocked:
         raise HTTPException(
             status_code=403,
             detail="Your account has been blocked. Please contact support."
         )
-    jwt_token = create_access_token(data={"sub": str(user.id)})
+    
+    # Check if email verified (for existing users)
+    if not user.email_verified:
+        raise HTTPException(
+            status_code=403,
+            detail="Please verify your email first"
+        )
+    
+    # Issue JWT with password version
+    jwt_token = create_access_token(
+        data={"sub": str(user.id)},
+        password_changed_at=user.password_changed_at
+    )
     return {"access_token": jwt_token, "token_type": "bearer", "provider": provider}

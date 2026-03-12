@@ -1,5 +1,6 @@
 from pydantic_settings import BaseSettings
 from functools import lru_cache
+import os
 
 
 class Settings(BaseSettings):
@@ -14,8 +15,8 @@ class Settings(BaseSettings):
     # Redis
     REDIS_URL: str = "redis://localhost:6379/0"
     
-    # Auth
-    SECRET_KEY: str = "change-me-in-production-use-a-strong-random-key"
+    # Auth - These MUST be set in production
+    SECRET_KEY: str = ""
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 10080  # 7 days
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
@@ -33,8 +34,11 @@ class Settings(BaseSettings):
     # Frontend URL
     FRONTEND_URL: str = "http://localhost:3000"
     
-    # Encryption key for stored credentials
-    ENCRYPTION_KEY: str = "change-me-use-fernet-key"
+    # Allowed CORS origins (comma-separated)
+    ALLOWED_ORIGINS: str = "http://localhost:3000,http://localhost:8000,http://127.0.0.1:3000,http://127.0.0.1:8000"
+    
+    # Encryption key for stored credentials - MUST be set in production
+    ENCRYPTION_KEY: str = ""
     
     # OAuth
     OAUTH_GOOGLE_CLIENT_ID: str = ""
@@ -46,8 +50,30 @@ class Settings(BaseSettings):
     
     class Config:
         env_file = ".env"
+        extra = "ignore"  # Allow extra fields from env
+    
+    def get_allowed_origins(self) -> list:
+        """Parse ALLOWED_ORIGINS string into list and add FRONTEND_URL."""
+        origins = [origin.strip() for origin in self.ALLOWED_ORIGINS.split(",") if origin.strip()]
+        if self.FRONTEND_URL and self.FRONTEND_URL not in origins:
+            origins.append(self.FRONTEND_URL)
+        return origins
+    
+    def validate_production_keys(self) -> None:
+        """Validate that critical security keys are set for production."""
+        if not self.DEBUG:
+            if not self.SECRET_KEY or len(self.SECRET_KEY) < 32:
+                raise ValueError("SECRET_KEY must be set and be at least 32 characters in production")
+            if not self.ENCRYPTION_KEY or len(self.ENCRYPTION_KEY) < 32:
+                raise ValueError("ENCRYPTION_KEY must be set and be at least 32 characters in production")
 
 
-@lru_cache()
+_settings = None
+
 def get_settings() -> Settings:
-    return Settings()
+    global _settings
+    if _settings is None:
+        _settings = Settings()
+        # Validate production keys on startup
+        _settings.validate_production_keys()
+    return _settings

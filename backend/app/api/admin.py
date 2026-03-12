@@ -59,9 +59,9 @@ async def toggle_block_user(
         raise HTTPException(status_code=404, detail="User not found")
 
     # Toggle email_verified as a simple block mechanism
-    user.email_verified = not user.email_verified
+    user.is_blocked = not user.is_blocked
     await db.commit()
-    status = "unblocked" if user.email_verified else "blocked"
+    status = "unblocked" if not user.is_blocked else "blocked"
     return {"message": f"User {status}"}
 
 

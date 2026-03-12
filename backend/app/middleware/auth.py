@@ -24,10 +24,14 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
 
 
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None, password_changed_at: Optional[datetime] = None) -> str:
+    """Create access token with optional password version for invalidation."""
     to_encode = data.copy()
     expire = datetime.utcnow() + (expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES))
     to_encode.update({"exp": expire, "type": "access"})
+    # Include password_changed_at timestamp to invalidate tokens on password change
+    if password_changed_at:
+        to_encode["pwd_v"] = password_changed_at.isoformat()
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 
@@ -53,6 +57,8 @@ async def get_current_user(
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         user_id: str = payload.get("sub")
         token_type: str = payload.get("type")
+        token_pwd_version: str = payload.get("pwd_v")  # Password version from token
+        
         if user_id is None or token_type != "access":
             raise credentials_exception
     except JWTError:
@@ -62,6 +68,27 @@ async def get_current_user(
     user = result.scalar_one_or_none()
     if user is None:
         raise credentials_exception
+    
+    # Check if user is blocked
+    if user.is_blocked:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your account has been blocked. Please contact support.",
+        )
+    
+    # Validate password version - invalidate tokens if password changed after token was issued
+    if user.password_changed_at and token_pwd_version:
+        try:
+            token_pwd_time = datetime.fromisoformat(token_pwd_version)
+            if user.password_changed_at > token_pwd_time:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Session expired. Please log in again.",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+        except ValueError:
+            pass  # Invalid format, allow through
+    
     return user
 
 

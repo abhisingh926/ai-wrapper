@@ -24,7 +24,8 @@ async def run_scheduled_skill(config: UserSkillConfig):
                 market_type=config.market_type,
                 custom_prompt=config.custom_prompt,
             )
-            logger.info(f"Executing scheduled skill {config.skill_id} for user {user.email}")
+            # Log user ID instead of email for GDPR compliance
+            logger.info(f"Executing scheduled skill {config.skill_id} for user_id={user.id}")
             
             # test_skill requires skill_id, data, current_user, and db session
             await test_skill(
@@ -34,7 +35,7 @@ async def run_scheduled_skill(config: UserSkillConfig):
                 db=db
             )
     except Exception as e:
-        logger.error(f"Error executing scheduled skill for user {config.user_id}: {e}")
+        logger.error(f"Error executing scheduled skill for user_id={config.user_id}: {e}")
 
 async def scheduler_loop():
     """Background task that checks every minute for skills to run."""
@@ -65,11 +66,13 @@ async def scheduler_loop():
                         
                         if current_time_str == config.notify_time:
                             # Time matches! Run it in the background so one slow skill doesn't block others
-                            asyncio.create_task(run_scheduled_skill(config, db))
+                            # FIX: Removed extra 'db' argument - function only takes config
+                            asyncio.create_task(run_scheduled_skill(config))
                             
                     except pytz.UnknownTimeZoneError:
-                        logger.warning(f"Unknown timezone {config.notify_timezone} for config {config.id}")
-                        continue
+                        logger.warning(f"Unknown timezone {config.notify_timezone} for config_id={config.id}")
+                    except Exception as e:
+                        logger.error(f"Error processing config {config.id}: {e}")
                         
         except Exception as e:
             logger.error(f"Scheduler loop error: {e}")

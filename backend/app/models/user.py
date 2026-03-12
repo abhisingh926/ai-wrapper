@@ -21,9 +21,11 @@ class User(Base):
     password_hash = Column(String(255), nullable=False)
     role = Column(SAEnum(UserRole), default=UserRole.USER, nullable=False)
     email_verified = Column(Boolean, default=False)
+    is_blocked = Column(Boolean, default=False, index=True)  # NEW: Dedicated block field
     verification_token = Column(String(255), nullable=True)
     reset_token = Column(String(255), nullable=True)
     reset_token_expires = Column(DateTime, nullable=True)
+    password_changed_at = Column(DateTime, default=datetime.utcnow, nullable=True)  # NEW: For token invalidation
     oauth_provider = Column(String(50), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
