@@ -65,7 +65,7 @@ async def scheduler_loop():
                         
                         if current_time_str == config.notify_time:
                             # Time matches! Run it in the background so one slow skill doesn't block others
-                            asyncio.create_task(run_scheduled_skill(config, db))
+                            asyncio.create_task(run_scheduled_skill(config))
                             
                     except pytz.UnknownTimeZoneError:
                         logger.warning(f"Unknown timezone {config.notify_timezone} for config {config.id}")

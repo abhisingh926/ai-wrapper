@@ -24,17 +24,28 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
 
 
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+def _password_version(user: User) -> int:
+    """Return an integer version derived from the password_changed_at timestamp."""
+    if user.password_changed_at is None:
+        return 0
+    return int(user.password_changed_at.timestamp())
+
+
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None, user: Optional[User] = None) -> str:
     to_encode = data.copy()
     expire = datetime.utcnow() + (expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES))
     to_encode.update({"exp": expire, "type": "access"})
+    if user is not None:
+        to_encode["pwd_ver"] = _password_version(user)
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 
-def create_refresh_token(data: dict) -> str:
+def create_refresh_token(data: dict, user: Optional[User] = None) -> str:
     to_encode = data.copy()
     expire = datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
     to_encode.update({"exp": expire, "type": "refresh"})
+    if user is not None:
+        to_encode["pwd_ver"] = _password_version(user)
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 
@@ -62,6 +73,11 @@ async def get_current_user(
     user = result.scalar_one_or_none()
     if user is None:
         raise credentials_exception
+
+    token_pwd_ver = payload.get("pwd_ver")
+    if token_pwd_ver is not None and token_pwd_ver != _password_version(user):
+        raise credentials_exception
+
     return user
 
 

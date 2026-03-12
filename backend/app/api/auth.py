@@ -1,6 +1,9 @@
+import secrets
 import uuid
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import RedirectResponse
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.database import get_db
@@ -23,12 +26,10 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
     """Register a new user with email and password."""
-    # Check if email already exists
     result = await db.execute(select(User).where(User.email == data.email))
     if result.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Email already registered")
 
-    # Create user
     verification_token = str(uuid.uuid4())
     user = User(
         name=data.name,
@@ -39,7 +40,6 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
     db.add(user)
     await db.flush()
 
-    # Create free subscription
     subscription = Subscription(
         user_id=user.id,
         plan=PlanType.FREE,
@@ -51,7 +51,6 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
     await db.commit()
     await db.refresh(user)
 
-    # Send verification email (async, non-blocking)
     await send_verification_email(data.email, verification_token)
 
     return user
@@ -69,7 +68,7 @@ async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
     if not user.email_verified:
         raise HTTPException(status_code=403, detail="Please verify your email first")
 
-    access_token = create_access_token(data={"sub": str(user.id)})
+    access_token = create_access_token(data={"sub": str(user.id)}, user=user)
     return TokenResponse(access_token=access_token)
 
 
@@ -95,7 +94,6 @@ async def forgot_password(data: ForgotPasswordRequest, db: AsyncSession = Depend
     result = await db.execute(select(User).where(User.email == data.email))
     user = result.scalar_one_or_none()
 
-    # Always return success (don't reveal if email exists)
     if user:
         reset_token = str(uuid.uuid4())
         user.reset_token = reset_token
@@ -123,6 +121,7 @@ async def reset_password(data: ResetPasswordRequest, db: AsyncSession = Depends(
     user.password_hash = hash_password(data.new_password)
     user.reset_token = None
     user.reset_token_expires = None
+    user.password_changed_at = datetime.utcnow()
     await db.commit()
 
     return {"message": "Password reset successfully"}
@@ -163,6 +162,10 @@ OAUTH_PROVIDERS = {
     },
 }
 
+# In-memory CSRF state store: {csrf_token: provider}
+# For production with multiple workers this should be stored in Redis or the database.
+_oauth_state_store: dict[str, str] = {}
+
 
 @router.get("/oauth/{provider}")
 async def oauth_initiate(provider: str):
@@ -184,23 +187,24 @@ async def oauth_initiate(provider: str):
             detail=f"{provider.title()} OAuth not configured. Set OAUTH_{provider.upper()}_CLIENT_ID in .env",
         )
 
+    csrf_token = secrets.token_urlsafe(32)
+    state = f"{provider}:{csrf_token}"
+    _oauth_state_store[csrf_token] = provider
+
     params = {
         "client_id": client_id,
         "redirect_uri": redirect_uri,
         "response_type": "code",
         "scope": cfg["scopes"],
-        "state": provider,  # simple state; use CSRF token in production
+        "state": state,
     }
 
     if provider == "apple":
         params["response_mode"] = "form_post"
 
     auth_url = f"{cfg['authorize_url']}?{urllib.parse.urlencode(params)}"
-    from fastapi.responses import RedirectResponse
     return RedirectResponse(url=auth_url)
 
-
-from pydantic import BaseModel
 
 class OAuthCallbackRequest(BaseModel):
     code: str
@@ -220,9 +224,19 @@ async def oauth_callback(
 
     code = payload.code
     state = payload.state
-    provider = state.lower()
+
+    if ":" not in state:
+        raise HTTPException(status_code=400, detail="Invalid state parameter")
+
+    provider, csrf_token = state.split(":", 1)
+    provider = provider.lower()
+
     if provider not in OAUTH_PROVIDERS:
-        raise HTTPException(status_code=400, detail="Invalid provider state")
+        raise HTTPException(status_code=400, detail="Invalid provider in state")
+
+    expected_provider = _oauth_state_store.pop(csrf_token, None)
+    if expected_provider is None or expected_provider != provider:
+        raise HTTPException(status_code=400, detail="Invalid or expired OAuth state token")
 
     settings = get_settings()
     cfg = OAUTH_PROVIDERS[provider]
@@ -230,9 +244,6 @@ async def oauth_callback(
     client_secret = getattr(settings, f"OAUTH_{provider.upper()}_CLIENT_SECRET", "")
     redirect_uri = settings.OAUTH_REDIRECT_URI
 
-    # Exchange code for access token
-    print(f"[OAuth] Exchanging code for provider={provider}, redirect_uri={redirect_uri}")
-    print(f"[OAuth] client_id={client_id[:20]}..., client_secret={'set' if client_secret else 'MISSING'}")
     async with httpx.AsyncClient() as client:
         token_resp = await client.post(
             cfg["token_url"],
@@ -246,8 +257,6 @@ async def oauth_callback(
             headers={"Accept": "application/json"},
         )
 
-    print(f"[OAuth] Token response status={token_resp.status_code}, body={token_resp.text[:500]}")
-
     if token_resp.status_code != 200:
         error_detail = token_resp.json() if token_resp.headers.get("content-type", "").startswith("application/json") else token_resp.text
         raise HTTPException(status_code=400, detail=f"Token exchange failed: {error_detail}")
@@ -255,7 +264,6 @@ async def oauth_callback(
     tokens = token_resp.json()
     access_token = tokens.get("access_token")
 
-    # Fetch user info from provider
     if cfg["userinfo_url"]:
         async with httpx.AsyncClient() as client:
             user_resp = await client.get(
@@ -266,7 +274,6 @@ async def oauth_callback(
     else:
         user_info = tokens  # Apple sends user data in the token response
 
-    # Normalize user info across providers
     if provider == "google":
         oauth_email = user_info.get("email")
         oauth_name = user_info.get("name", "")
@@ -277,7 +284,6 @@ async def oauth_callback(
         oauth_email = user_info.get("mail") or user_info.get("userPrincipalName")
         oauth_name = user_info.get("displayName", "")
     elif provider == "apple":
-        # Apple only returns user info on first login
         oauth_email = user_info.get("email")
         oauth_name = ""
     else:
@@ -286,7 +292,6 @@ async def oauth_callback(
     if not oauth_email:
         raise HTTPException(status_code=400, detail="Could not retrieve email from provider")
 
-    # Find or create user
     result = await db.execute(select(User).where(User.email == oauth_email))
     user = result.scalar_one_or_none()
 
@@ -301,7 +306,6 @@ async def oauth_callback(
         db.add(user)
         await db.flush()
 
-        # Create free subscription for new OAuth users
         subscription = Subscription(
             user_id=user.id,
             plan=PlanType.FREE,
@@ -313,11 +317,11 @@ async def oauth_callback(
         await db.commit()
         await db.refresh(user)
 
-    # Issue JWT (but block if user is blocked)
     if not user.email_verified:
         raise HTTPException(
             status_code=403,
             detail="Your account has been blocked. Please contact support."
         )
-    jwt_token = create_access_token(data={"sub": str(user.id)})
+
+    jwt_token = create_access_token(data={"sub": str(user.id)}, user=user)
     return {"access_token": jwt_token, "token_type": "bearer", "provider": provider}
