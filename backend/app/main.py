@@ -4,7 +4,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from app.config import get_settings
 from app.middleware.rate_limit import limiter
-from app.api import auth, workflows, integrations, billing, profile, admin, test_message, assistant, agents, tools, knowledge, channels, webhooks, google_calendar_oauth, skills
+from app.api import auth, workflows, integrations, billing, profile, admin, test_message, assistant, agents, tools, knowledge, channels, webhooks, google_calendar_oauth, skills, coding_agent
 
 from contextlib import asynccontextmanager
 from app.scheduler import start_scheduler
@@ -57,6 +57,7 @@ app.include_router(knowledge.router, prefix="/api/agents", tags=["knowledge"])
 app.include_router(webhooks.router)
 app.include_router(google_calendar_oauth.router)
 app.include_router(skills.router)
+app.include_router(coding_agent.router)
 
 
 

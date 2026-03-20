@@ -1,5 +1,5 @@
 {
-  "max_scrape_pages": 100,
+  "max_scrape_pages": 1,
   "max_content_size_kb": 200,
   "allowed_file_types": [
     ".pdf",

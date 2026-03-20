@@ -41,6 +41,14 @@ class Settings(BaseSettings):
     OAUTH_GOOGLE_CLIENT_SECRET: str = ""
     OAUTH_REDIRECT_URI: str = "http://localhost:3000/auth/callback"
     
+    # GitHub OAuth (for Coding Agent integration)
+    OAUTH_GITHUB_CLIENT_ID: str = ""
+    OAUTH_GITHUB_CLIENT_SECRET: str = ""
+    
+    # GitLab OAuth (for Coding Agent integration)  
+    OAUTH_GITLAB_CLIENT_ID: str = ""
+    OAUTH_GITLAB_CLIENT_SECRET: str = ""
+    
     # OpenAI
     OPENAI_API_KEY: str = ""
     

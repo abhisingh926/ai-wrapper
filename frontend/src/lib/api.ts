@@ -213,4 +213,10 @@ export const leadsApi = {
         api.get(`/api/agents/${agentId}/leads/export`, { responseType: "blob" }),
 };
 
+/* ──── Coding Agent API ──── */
+export const codingAgentApi = {
+    chat: (message: string, repository_url?: string) =>
+        api.post("/api/coding-agent/chat", { message, repository_url }),
+};
+
 export default api;
