@@ -13,6 +13,8 @@ from app.models.agent_knowledge import AgentKnowledge
 from app.models.user import User
 from app.models.subscription import Subscription
 from app.models.chat_session import ChatSession, ChatMessage
+from app.services.chroma import get_agent_collection
+from app.models.agent_database import AgentDatabaseConnection
 
 async def _parse_and_save_lead(reply_text: str, agent: Agent, lead_fields: list, user_messages: list, db: AsyncSession, whatsapp_phone: str = None) -> str:
     """Helper function to parse the [LEAD_CAPTURED] token, save to backend, and strip it from user output."""
@@ -123,6 +125,30 @@ async def execute_agent_chat(
             rag_context += "\n--- END KNOWLEDGE BASE CONTEXT ---\nUse the above context to inform your answers when relevant."
             system_prompt += rag_context
 
+    # 3b. Check for Knowledge Base 2.0 tool and inject Vector RAG context
+    if "knowledge_base_v2" in (agent.tools or []):
+        try:
+            # Get user query from the last message
+            user_query = user_messages[-1].get("content", "") if user_messages else ""
+            if user_query:
+                # Search ChromaDB
+                collection = get_agent_collection(str(agent.id))
+                results = collection.query(
+                    query_texts=[user_query],
+                    n_results=4 # Get top 4 most relevant chunks
+                )
+                
+                if results["documents"] and results["documents"][0]:
+                    rag_context_v2 = "\n\n--- KNOWLEDGE BASE 2.0 CONTEXT ---\n"
+                    # results["documents"][0] is a list of chunks matching the query
+                    for i, chunk in enumerate(results["documents"][0]):
+                        source = results["metadatas"][0][i].get("source", "Unknown") if results["metadatas"] else "Unknown"
+                        rag_context_v2 += f"\nSnippet {i+1} (Source: {source}):\n{chunk}\n"
+                    rag_context_v2 += "\n--- END KNOWLEDGE BASE 2.0 CONTEXT ---\nOnly use the above snippets to inform your answers if they are relevant to the user's question."
+                    system_prompt += rag_context_v2
+        except Exception as e:
+            print(f"[Knowledge Base 2.0] Error querying vector DB: {e}")
+
     # 4. Check for Lead Catcher tool and inject collection instructions
     lead_fields = []
     whatsapp_phone = None  # Will be set if chat originates from WhatsApp
@@ -172,6 +198,51 @@ RULES:
 
     # 5. Build tool schemas
     llm_tools = []
+    
+    # 5b. Database Agent logic
+    if "database_agent" in (agent.tools or []):
+        db_conn_q = await db.execute(select(AgentDatabaseConnection).where(AgentDatabaseConnection.agent_id == agent.id, AgentDatabaseConnection.status == "connected"))
+        if db_conn_q.scalar_one_or_none():
+            DATABASE_TOOL_SCHEMA = {
+                "type": "function",
+                "function": {
+                    "name": "execute_database_query",
+                    "description": "Execute a strictly read-only SQL query against the user's database to answer their question. Always use standard SQL syntax. The query must match the provided database schemas.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "sql_query": {
+                                "type": "string",
+                                "description": "The exact SQL query to execute."
+                            }
+                        },
+                        "required": ["sql_query"]
+                    }
+                }
+            }
+            llm_tools.append(DATABASE_TOOL_SCHEMA)
+            
+            # Fetch context from Chroma
+            try:
+                user_query = user_messages[-1].get("content", "") if user_messages else ""
+                if user_query:
+                    collection = get_agent_collection(str(agent.id))
+                    results = collection.query(
+                        query_texts=[user_query],
+                        n_results=10,
+                        where={"source": "database_schema"}
+                    )
+                    
+                    if results["documents"] and results["documents"][0]:
+                        db_context = "\n\n--- EXTERNAL DATABASE SCHEMA ---\n"
+                        db_context += "You can use the 'execute_database_query' tool to query the following relevant tables and columns:\n"
+                        # results["documents"][0] is a list of schema chunks matching the query
+                        for chunk in results["documents"][0]:
+                            db_context += f"- {chunk}\n"
+                        db_context += "\n--- END SCHEMA ---\nOnly query columns/tables provided in this schema."
+                        system_prompt += db_context
+            except Exception as e:
+                print(f"[Database Agent] Error querying schema vector DB: {e}")
     if "weather" in (agent.tools or []):
         from app.services.weather import WEATHER_TOOL_SCHEMA
         llm_tools.append(WEATHER_TOOL_SCHEMA)
@@ -395,6 +466,26 @@ After collecting ALL 6 answers, call the calculate_solar_power tool with the col
                         )
                         tool_result_str = json.dumps(tool_result)
                         print(f"[Solar] Calculated for: {fn_args.get('location')}")
+                    elif fn_name == "execute_database_query":
+                        sql_query = fn_args.get("sql_query", "")
+                        from app.services.database_connector import execute_safe_query
+                        
+                        db_conn_fetch = await db.execute(select(AgentDatabaseConnection).where(AgentDatabaseConnection.agent_id == agent.id))
+                        conn_model = db_conn_fetch.scalar_one_or_none()
+                        
+                        if conn_model:
+                            try:
+                                rows = execute_safe_query(conn_model, sql_query)
+                                # Prevent passing massive results causing token limits
+                                if len(str(rows)) > 30000:
+                                    tool_result_str = json.dumps({"error": "Query returned too much data. Please add a strict LIMIT clause or aggregate the result (e.g., COUNT)."})
+                                else:
+                                    tool_result_str = json.dumps({"status": "success", "rows": rows, "query_executed": sql_query})
+                            except Exception as e:
+                                tool_result_str = json.dumps({"error": f"Failed to execute query: {str(e)}"})
+                        else:
+                            tool_result_str = json.dumps({"error": "Database not connected."})
+                        print(f"[Database Agent] Executed SQL: {sql_query}")
                     else:
                         tool_result_str = json.dumps({"error": f"Unknown tool: {fn_name}"})
                     

@@ -6,6 +6,8 @@ from app.models.agent import Agent
 from app.models.tool import Tool
 from app.models.admin_channel import AdminChannel
 from app.models.agent_knowledge import AgentKnowledge
+from app.models.agent_knowledge_v2 import AgentKnowledgeV2
+from app.models.agent_database import AgentDatabaseConnection, AgentDatabaseSchema, AgentDatabaseTableMeta
 from app.models.lead import AgentLead
 from app.models.chat_session import ChatSession, ChatMessage
 from app.models.skill import Skill
@@ -21,11 +23,14 @@ __all__ = [
     "Tool",
     "AdminChannel",
     "AgentKnowledge",
+    "AgentKnowledgeV2",
+    "AgentDatabaseConnection", "AgentDatabaseSchema", "AgentDatabaseTableMeta",
     "AgentLead",
     "ChatSession", "ChatMessage",
     "Skill",
     "UserSkillConfig",
     "SkillMessageLog",
 ]
+
 
 

@@ -42,7 +42,7 @@ function CallbackContent() {
                 }
 
                 setToken(data.access_token);
-                router.push("/projects");
+                router.push("/dashboard");
             } catch (err: any) {
                 if (err.name === "TypeError" && err.message === "Failed to fetch") {
                     setError("Cannot connect to the server. Please make sure the backend is running on port 8000.");

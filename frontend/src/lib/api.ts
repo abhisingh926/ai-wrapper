@@ -204,6 +204,40 @@ export const knowledgeApi = {
         api.delete(`/api/agents/${agentId}/knowledge/${knowledgeId}`),
 };
 
+/* ──── Knowledge V2 (ChromaDB) API ──── */
+export const knowledgeV2Api = {
+    list: (agentId: string) => api.get(`/api/agents/${agentId}/knowledge_v2`),
+    uploadFile: (agentId: string, file: File) => {
+        const formData = new FormData();
+        formData.append("file", file);
+        return api.post(`/api/agents/${agentId}/knowledge_v2/file`, formData, {
+            headers: { "Content-Type": "multipart/form-data" },
+        });
+    },
+    scrapeUrl: (agentId: string, url: string) =>
+        api.post(`/api/agents/${agentId}/knowledge_v2/url`, { url }),
+    saveText: (agentId: string, text: string, source_name?: string) =>
+        api.post(`/api/agents/${agentId}/knowledge_v2/text`, { text, source_name }),
+    delete: (agentId: string, knowledgeId: string) =>
+        api.delete(`/api/agents/${agentId}/knowledge_v2/${knowledgeId}`),
+};
+
+/* ──── Database Agent API ──── */
+export const databaseApi = {
+    getConnection: (agentId: string) => api.get(`/api/agents/${agentId}/database/connection`),
+    saveConnection: (agentId: string, data: any) => api.post(`/api/agents/${agentId}/database/connection`, data),
+    getSchema: (agentId: string) => api.get(`/api/agents/${agentId}/database/schema`),
+    fetchSchema: (agentId: string) => api.post(`/api/agents/${agentId}/database/schema/fetch`),
+    generateAiSchema: (agentId: string) => api.post(`/api/agents/${agentId}/database/schema/generate`),
+    saveSchema: (agentId: string, data: { items: any[], table_metas?: any[] }) => api.post(`/api/agents/${agentId}/database/schema/save`, data),
+    getTableMeta: (agentId: string) => api.get(`/api/agents/${agentId}/database/table-meta`),
+    toggleTableHidden: (agentId: string, tableName: string, isHidden: boolean) =>
+        api.post(`/api/agents/${agentId}/database/table-meta/${encodeURIComponent(tableName)}/toggle-hidden`, { is_hidden: isHidden }),
+    bulkUpdateStatus: (agentId: string, tableNames: string[], reviewStatus: string) =>
+        api.post(`/api/agents/${agentId}/database/table-meta/bulk-status`, { table_names: tableNames, review_status: reviewStatus }),
+    getRelationships: (agentId: string) => api.get(`/api/agents/${agentId}/database/relationships`),
+};
+
 /* ──── Leads API ──── */
 export const leadsApi = {
     list: (agentId: string) => api.get(`/api/agents/${agentId}/leads`),

@@ -3,9 +3,10 @@
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import api, { agentApi, toolsApi, channelsApi, knowledgeApi, leadsApi } from "@/lib/api";
+import api, { agentApi, toolsApi, channelsApi, knowledgeApi, knowledgeV2Api, leadsApi } from "@/lib/api";
 import { useAuthStore } from "@/hooks/useAuth";
 import TestAgentChat from "@/components/TestAgentChat";
+import DatabaseToolModal from "@/components/DatabaseToolModal";
 
 type Agent = {
     id: string;
@@ -232,12 +233,16 @@ export default function AgentViewPage() {
         return () => { if (interval) clearInterval(interval); };
     }, [agent, autoRefresh, activeTab]);
 
-    const loadKnowledge = async (id: string) => {
+    const loadKnowledge = async (id: string, isV2: boolean = false) => {
+        setKnowledgeLoading(true);
         try {
-            const res = await knowledgeApi.list(id);
+            const apiToUse = isV2 ? knowledgeV2Api : knowledgeApi;
+            const res = await apiToUse.list(id);
             setKnowledgeItems(res.data);
         } catch (err) {
             console.error("Failed to load knowledge", err);
+        } finally {
+            setKnowledgeLoading(false);
         }
     };
 
@@ -388,6 +393,9 @@ export default function AgentViewPage() {
     const handleOpenConfigure = (toolId: string) => {
         setConfigureToolModal(toolId);
         setActiveToolConfig(agent?.tool_configs?.[toolId] || {});
+        if (toolId === "knowledge_base" || toolId === "knowledge_base_v2") {
+            loadKnowledge(agent!.id, toolId === "knowledge_base_v2");
+        }
     };
 
     const handleSaveToolConfig = async () => {
@@ -410,8 +418,10 @@ export default function AgentViewPage() {
         if (!agent || !e.target.files?.[0]) return;
         setKnowledgeLoading(true);
         try {
-            await knowledgeApi.uploadFile(agent.id, e.target.files[0]);
-            loadKnowledge(agent.id);
+            const isV2 = configureToolModal === "knowledge_base_v2";
+            const apiToUse = isV2 ? knowledgeV2Api : knowledgeApi;
+            await apiToUse.uploadFile(agent.id, e.target.files[0]);
+            loadKnowledge(agent.id, isV2);
             if (fileInputRef.current) fileInputRef.current.value = "";
         } catch (err: any) {
             console.error(err);
@@ -424,9 +434,11 @@ export default function AgentViewPage() {
         if (!agent || !activeToolConfig.scrapeUrl) return;
         setKnowledgeLoading(true);
         try {
-            await knowledgeApi.scrapeUrl(agent.id, activeToolConfig.scrapeUrl);
+            const isV2 = configureToolModal === "knowledge_base_v2";
+            const apiToUse = isV2 ? knowledgeV2Api : knowledgeApi;
+            await apiToUse.scrapeUrl(agent.id, activeToolConfig.scrapeUrl);
             setActiveToolConfig({ ...activeToolConfig, scrapeUrl: "" });
-            loadKnowledge(agent.id);
+            loadKnowledge(agent.id, isV2);
         } catch (err: any) {
             console.error(err);
             alert(err.response?.data?.detail || "Failed to scrape URL");
@@ -438,9 +450,11 @@ export default function AgentViewPage() {
         if (!agent || !activeToolConfig.rawText) return;
         setKnowledgeLoading(true);
         try {
-            await knowledgeApi.saveText(agent.id, activeToolConfig.rawText);
+            const isV2 = configureToolModal === "knowledge_base_v2";
+            const apiToUse = isV2 ? knowledgeV2Api : knowledgeApi;
+            await apiToUse.saveText(agent.id, activeToolConfig.rawText);
             setActiveToolConfig({ ...activeToolConfig, rawText: "" });
-            loadKnowledge(agent.id);
+            loadKnowledge(agent.id, isV2);
         } catch (err: any) {
             console.error(err);
             alert(err.response?.data?.detail || "Failed to save text");
@@ -451,8 +465,10 @@ export default function AgentViewPage() {
     const handleDeleteKnowledge = async (knowledgeId: string) => {
         if (!agent) return;
         try {
-            await knowledgeApi.delete(agent.id, knowledgeId);
-            loadKnowledge(agent.id);
+            const isV2 = configureToolModal === "knowledge_base_v2";
+            const apiToUse = isV2 ? knowledgeV2Api : knowledgeApi;
+            await apiToUse.delete(agent.id, knowledgeId);
+            loadKnowledge(agent.id, isV2);
         } catch (err) {
             console.error(err);
         }
@@ -2371,11 +2387,11 @@ ${code}
             {
                 configureToolModal && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-                        <div className={`bg-[#1C1C1E] border border-slate-700/50 rounded-xl w-full ${configureToolModal === "knowledge_base" ? "max-w-5xl" : "max-w-lg"} overflow-hidden shadow-2xl flex flex-col max-h-[90vh]`}>
+                        <div className={`bg-[#1C1C1E] border border-slate-700/50 rounded-xl w-full ${(configureToolModal === "knowledge_base" || configureToolModal === "knowledge_base_v2" || configureToolModal === "database_agent") ? "max-w-5xl" : "max-w-lg"} overflow-hidden shadow-2xl flex flex-col max-h-[90vh]`}>
                             {/* Modal Header */}
                             <div className="flex items-start justify-between p-5 border-b border-slate-800">
                                 <div className="flex items-center gap-3">
-                                    {configureToolModal === "knowledge_base" && (
+                                    {(configureToolModal === "knowledge_base" || configureToolModal === "knowledge_base_v2" || configureToolModal === "database_agent") && (
                                         <button
                                             onClick={() => setConfigureToolModal(null)}
                                             className="w-10 h-10 flex items-center justify-center bg-[#1C1C1E] hover:bg-slate-800 border border-slate-700/50 text-slate-300 rounded-lg mr-2 transition-colors"
@@ -2388,14 +2404,14 @@ ${code}
                                     </span>
                                     <div>
                                         <h3 className="text-lg font-bold text-white tracking-wide">
-                                            {configureToolModal === "knowledge_base" ? "Knowledge Base (RAG)" : `Configure ${allTools.find(t => t.id === configureToolModal)?.name} `}
+                                            {(configureToolModal === "knowledge_base" || configureToolModal === "knowledge_base_v2" || configureToolModal === "database_agent") ? (configureToolModal === "database_agent" ? "Database Connection" : (configureToolModal === "knowledge_base_v2" ? "Knowledge Base 2.0 (Vector DB)" : "Knowledge Base (Simple)")) : `Configure ${allTools.find(t => t.id === configureToolModal)?.name} `}
                                         </h3>
                                         <p className="text-sm text-slate-400 mt-0.5">
-                                            {configureToolModal === "knowledge_base" ? "Manage the specialized knowledge your agent uses to answer questions." : "Configure settings and parameters for the selected tool."}
+                                            {(configureToolModal === "knowledge_base" || configureToolModal === "knowledge_base_v2") ? "Manage the specialized knowledge your agent uses to answer questions." : (configureToolModal === "database_agent" ? "Connect a database and vectorize its schema for the agent to query safely." : "Configure settings and parameters for the selected tool.")}
                                         </p>
                                     </div>
                                 </div>
-                                {configureToolModal !== "knowledge_base" && (
+                                {(configureToolModal !== "knowledge_base" && configureToolModal !== "knowledge_base_v2" && configureToolModal !== "database_agent") && (
                                     <button
                                         onClick={() => setConfigureToolModal(null)}
                                         className="text-slate-500 hover:text-white transition-colors p-1"
@@ -2468,7 +2484,7 @@ ${code}
                                     </>
                                 )}
 
-                                {configureToolModal === "knowledge_base" && (
+                                {(configureToolModal === "knowledge_base" || configureToolModal === "knowledge_base_v2") && (
                                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                                         <div className="lg:col-span-2 space-y-4">
                                             <div className="border border-slate-800/80 rounded-xl p-5">
@@ -2586,12 +2602,12 @@ ${code}
                                                 </div>
                                                 <div className="p-5 space-y-5">
                                                     <div className="flex items-center justify-between">
-                                                        <span className="text-xs text-slate-300">Vector Search</span>
+                                                        <span className="text-xs text-slate-300">{configureToolModal === "knowledge_base_v2" ? "Vector DB Search" : "Basic Injection"}</span>
                                                         <span className="text-[10px] uppercase font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20">Active</span>
                                                     </div>
                                                     <div className="flex items-center justify-between">
                                                         <span className="text-xs text-slate-300">Embedding Model</span>
-                                                        <span className="text-xs text-slate-400">OpenAI v3-small</span>
+                                                        <span className="text-xs text-slate-400">{configureToolModal === "knowledge_base_v2" ? "local ChromaDB" : "N/A (Full Text)"}</span>
                                                     </div>
                                                     <div className="flex items-center justify-between">
                                                         <span className="text-xs text-slate-300">Total Chunks</span>
@@ -2734,8 +2750,12 @@ ${code}
                                     </div>
                                 )}
 
+                                {configureToolModal === "database_agent" && (
+                                    <DatabaseToolModal agentId={agent.id} onClose={() => setConfigureToolModal(null)} />
+                                )}
+
                                 {/* Fallback for other tools */}
-                                {!["lead_catcher", "knowledge_base", "browser", "google_calendar"].includes(configureToolModal) && (
+                                {!["lead_catcher", "knowledge_base", "knowledge_base_v2", "database_agent", "browser", "google_calendar"].includes(configureToolModal) && (
                                     <div>
                                         <p className="text-sm text-slate-400 mb-4">
                                             Advanced JSON configuration for this tool.
